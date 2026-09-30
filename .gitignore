@@ -1,0 +1,108 @@
+# ========================
+# .NET
+# ========================
+bin/
+obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.userprefs
+*.vs/
+
+# NuGet
+*.nupkg
+*.snupkg
+**/[Pp]ackages/
+!**/[Pp]ackages/build/
+*.lock.json
+project.lock.json
+artifacts/
+
+# Build results
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Ww][Ii][Nn]32/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+
+# ========================
+# ASP.NET
+# ========================
+wwwroot/lib/
+appsettings.Production.json
+appsettings.Staging.json
+
+# ========================
+# Rider / JetBrains
+# ========================
+.idea/
+*.suo
+*.iml
+*.ipr
+*.iws
+.idea_modules/
+
+# ========================
+# Visual Studio
+# ========================
+.vs/
+*.rsuser
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.opendb
+*.VC.db
+*.VC.VC.opendb
+TestResult.xml
+*.Cache
+ClientBin/
+~$*
+*~
+*.dbmdl
+*.dbproj.schemaview
+*.jfm
+*.pfx
+*.publishsettings
+orleans.codegen.cs
+Generated_Code/
+
+# ========================
+# Docker
+# ========================
+docker-compose.override.yml
+
+# ========================
+# Environment / Secrets
+# ========================
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets.json
+appsettings.Local.json
+
+# ========================
+# OS
+# ========================
+.DS_Store
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# ========================
+# Logs / Temporários
+# ========================
+*.log
+*.tmp
+*.temp
