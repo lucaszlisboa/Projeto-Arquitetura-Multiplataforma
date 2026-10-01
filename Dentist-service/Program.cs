@@ -1,8 +1,14 @@
+using Dentist_service.DentistsServices.Domain.Ports;
+using Dentist_service.DentistsServices.Domain.Validators;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
+
+// Registro do validator de DentistServices (arquitetura hexagonal: porta → implementação)
+builder.Services.AddScoped<IDentistServicesValidator, DentistServicesValidator>();
 
 var app = builder.Build();
 
