@@ -1,12 +1,15 @@
 services:
   go-db:
-    container_name: dentist-service
+    container_name: dentist-service-db
     image: postgres:12
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: dentists
+      POSTGRES_DB: dentist_service
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
