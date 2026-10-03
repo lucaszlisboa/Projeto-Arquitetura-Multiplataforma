@@ -29,4 +29,30 @@ public class DentistServices
         CreatedAt = DateTime.UtcNow;
         UpdatedAt = DateTime.UtcNow;
     }
+
+    /// <summary>
+    /// Atualiza os dados mutáveis do serviço, preservando Id, DentistId e CreatedAt.
+    /// </summary>
+    public void Update(string name, int price, bool isPeriodic, DentistServiceStatus status)
+    {
+        Name = name;
+        Price = price;
+        Isperiodic = isPeriodic;
+        Status = status;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    /// <summary>
+    /// Verifica se o serviço pertence ao dentista informado.
+    /// Regra de negócio de ownership centralizada na entidade.
+    /// </summary>
+    public bool IsOwnedBy(Guid dentistId) => DentistId == dentistId;
+
+    /// <summary>
+    /// Marca o serviço como deletado (soft delete).
+    /// </summary>
+    public void MarkAsDeleted()
+    {
+        DeletedAt = DateTime.UtcNow;
+    }
 }
