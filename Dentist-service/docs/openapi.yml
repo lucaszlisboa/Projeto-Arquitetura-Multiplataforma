@@ -1,0 +1,354 @@
+openapi: 3.0.4
+info:
+  title: Dentist Service API
+  description: |
+    API REST para gerenciamento de serviços odontológicos.
+
+    ## Autenticação
+    Endpoints que envolvem ownership requerem o header `X-Dentist-Id` com o GUID do dentista requisitante.
+    Quando autenticação JWT for adicionada, este header será substituído pelo claim do token.
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:5068
+    description: Local HTTP
+  - url: https://localhost:7235
+    description: Local HTTPS
+
+tags:
+  - name: Dentist Services
+    description: Gerenciamento de serviços odontológicos
+
+paths:
+
+  /api/dentist-services:
+
+    get:
+      tags:
+        - Dentist Services
+      summary: Listar serviços do dentista
+      description: Retorna todos os serviços pertencentes ao dentista identificado pelo header `X-Dentist-Id`.
+      operationId: GetAll
+      parameters:
+        - $ref: '#/components/parameters/XDentistId'
+      responses:
+        '200':
+          description: Lista de serviços retornada com sucesso
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DentistServicesResponse'
+              example:
+                - id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+                  name: Limpeza dental
+                  dentistId: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                  price: 150
+                  isPeriodic: true
+                  status: disponivel
+                  createdAt: "2026-10-03T12:00:00Z"
+                  updatedAt: "2026-10-03T12:00:00Z"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+    post:
+      tags:
+        - Dentist Services
+      summary: Criar serviço
+      description: Cria um novo serviço odontológico.
+      operationId: Create
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDentistServicesRequest'
+            example:
+              name: Limpeza dental
+              dentistId: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              price: 150
+              isPeriodic: true
+              status: disponivel
+      responses:
+        '201':
+          description: Serviço criado com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DentistServicesResponse'
+              example:
+                id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+                name: Limpeza dental
+                dentistId: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                price: 150
+                isPeriodic: true
+                status: disponivel
+                createdAt: "2026-10-03T12:00:00Z"
+                updatedAt: "2026-10-03T12:00:00Z"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/dentist-services/{id}:
+
+    get:
+      tags:
+        - Dentist Services
+      summary: Buscar serviço por Id
+      description: Retorna um serviço pelo Id. Somente o próprio dono pode acessar.
+      operationId: GetById
+      parameters:
+        - $ref: '#/components/parameters/ServiceId'
+        - $ref: '#/components/parameters/XDentistId'
+      responses:
+        '200':
+          description: Serviço encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DentistServicesResponse'
+              example:
+                id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+                name: Limpeza dental
+                dentistId: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                price: 150
+                isPeriodic: true
+                status: disponivel
+                createdAt: "2026-10-03T12:00:00Z"
+                updatedAt: "2026-10-03T12:00:00Z"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags:
+        - Dentist Services
+      summary: Atualizar serviço
+      description: Atualiza os dados de um serviço odontológico existente.
+      operationId: Update
+      parameters:
+        - $ref: '#/components/parameters/ServiceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateDentistServicesRequest'
+            example:
+              name: Limpeza dental completa
+              price: 200
+              isPeriodic: false
+              status: indisponivel
+      responses:
+        '200':
+          description: Serviço atualizado com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DentistServicesResponse'
+              example:
+                id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+                name: Limpeza dental completa
+                dentistId: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                price: 200
+                isPeriodic: false
+                status: indisponivel
+                createdAt: "2026-10-03T12:00:00Z"
+                updatedAt: "2026-10-03T13:00:00Z"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags:
+        - Dentist Services
+      summary: Deletar serviço
+      description: Remove um serviço. Somente o próprio dono pode deletar.
+      operationId: Delete
+      parameters:
+        - $ref: '#/components/parameters/ServiceId'
+        - $ref: '#/components/parameters/XDentistId'
+      responses:
+        '204':
+          description: Serviço removido com sucesso
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+
+  parameters:
+
+    ServiceId:
+      name: id
+      in: path
+      required: true
+      description: GUID do serviço odontológico
+      schema:
+        type: string
+        format: uuid
+      example: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+
+    XDentistId:
+      name: X-Dentist-Id
+      in: header
+      required: true
+      description: GUID do dentista requisitante. Será substituído por claim JWT quando autenticação for adicionada.
+      schema:
+        type: string
+        format: uuid
+      example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+
+  schemas:
+
+    DentistServiceStatus:
+      type: string
+      enum:
+        - disponivel
+        - indisponivel
+        - emBreve
+      description: |
+        Status do serviço odontológico:
+        - `disponivel` – disponível para agendamento
+        - `indisponivel` – temporariamente indisponível
+        - `emBreve` – em breve
+
+    CreateDentistServicesRequest:
+      type: object
+      required:
+        - name
+        - dentistId
+        - price
+        - isPeriodic
+        - status
+      properties:
+        name:
+          type: string
+          minLength: 3
+          maxLength: 100
+          description: Nome do serviço
+          example: Limpeza dental
+        dentistId:
+          type: string
+          format: uuid
+          description: GUID do dentista responsável pelo serviço
+          example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+        price:
+          type: integer
+          minimum: 1
+          description: Preço do serviço em centavos ou valor inteiro
+          example: 150
+        isPeriodic:
+          type: boolean
+          description: Indica se o serviço é periódico (recorrente)
+          example: true
+        status:
+          $ref: '#/components/schemas/DentistServiceStatus'
+
+    UpdateDentistServicesRequest:
+      type: object
+      required:
+        - name
+        - price
+        - isPeriodic
+        - status
+      properties:
+        name:
+          type: string
+          minLength: 3
+          maxLength: 100
+          description: Nome do serviço
+          example: Limpeza dental completa
+        price:
+          type: integer
+          minimum: 1
+          description: Preço do serviço
+          example: 200
+        isPeriodic:
+          type: boolean
+          description: Indica se o serviço é periódico
+          example: false
+        status:
+          $ref: '#/components/schemas/DentistServiceStatus'
+
+    DentistServicesResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: GUID único do serviço
+          example: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+        name:
+          type: string
+          description: Nome do serviço
+          example: Limpeza dental
+        dentistId:
+          type: string
+          format: uuid
+          description: GUID do dentista dono do serviço
+          example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+        price:
+          type: integer
+          description: Preço do serviço
+          example: 150
+        isPeriodic:
+          type: boolean
+          description: Indica se o serviço é periódico
+          example: true
+        status:
+          $ref: '#/components/schemas/DentistServiceStatus'
+        createdAt:
+          type: string
+          format: date-time
+          description: Data de criação (UTC)
+          example: "2026-10-03T12:00:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          description: Data da última atualização (UTC)
+          example: "2026-10-03T12:00:00Z"
+
+    ErrorResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          description: Descrição do erro
+          example: Serviço não encontrado.
+
+  responses:
+
+    BadRequest:
+      description: Payload inválido ou header `X-Dentist-Id` ausente/inválido
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            message: "Header 'X-Dentist-Id' ausente ou inválido."
+
+    Forbidden:
+      description: Serviço existe, mas pertence a outro dentista
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            message: "Acesso negado: este serviço não pertence ao dentista informado."
+
+    NotFound:
+      description: Serviço não encontrado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            message: "Serviço com id '7c9e6679-7425-40de-944b-e07fc1f90ae7' não encontrado."
