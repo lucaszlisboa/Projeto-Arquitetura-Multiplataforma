@@ -29,7 +29,13 @@ builder.Services.AddScoped<IDentistServicesUseCase, DentistServicesUseCase>();
 // ──────────────────────────────────────────────
 // API
 // ──────────────────────────────────────────────
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        // Permite enviar o status como string ("disponivel") em vez de número inteiro
+        options.JsonSerializerOptions.Converters.Add(
+            new System.Text.Json.Serialization.JsonStringEnumConverter());
+    });
 builder.Services.AddOpenApi();
 
 var app = builder.Build();

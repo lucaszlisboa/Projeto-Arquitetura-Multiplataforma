@@ -3,7 +3,7 @@ namespace Dentist_service.DentistsServices.Domain;
 public class DentistServices
 {
     public Guid Id { get; private set; }
-    public string Name { get; private set; }
+    public string Name { get; private set; } = null!;
     public Guid DentistId { get; private set; }
     public int Price { get; private set; }
     public DateTime CreatedAt { get; private set; }
@@ -11,6 +11,12 @@ public class DentistServices
     public DateTime DeletedAt { get; private set; }
     public bool Isperiodic { get; private set; }
     public DentistServiceStatus Status { get; private set; }
+
+    /// <summary>
+    /// Construtor protegido exigido pelo EF Core para materialização de entidades.
+    /// Não usar diretamente no código de aplicação.
+    /// </summary>
+    protected DentistServices() { }
 
     public DentistServices(
         Guid id,
