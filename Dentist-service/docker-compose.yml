@@ -1,5 +1,5 @@
 services:
-  go-db:
+  dentist-service:
     container_name: dentist-service-db
     image: postgres:12
     environment:
