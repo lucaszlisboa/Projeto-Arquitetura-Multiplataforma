@@ -22,6 +22,7 @@ public class AppointmentsController(DentistServicesDbContext db, IAppointmentEve
     public record WeeklyHoursItem(int DayOfWeek, TimeOnly StartTime, TimeOnly EndTime);
     public record ExceptionRequest(DateOnly Date, bool IsClosed, TimeOnly? StartTime, TimeOnly? EndTime);
     public record CreateAppointmentRequest(Guid ServiceId, string StartAt, string Type, string? InsuranceName, string? InsuranceCardNumber, Guid? PatientId);
+    public record UpdateAppointmentRequest(Guid DentistId, Guid ServiceId, string StartAt, string Type, string? InsuranceName, string? InsuranceCardNumber);
     [HttpGet("availability")]
     public async Task<IActionResult> Availability([FromQuery] Guid dentistId, [FromQuery] Guid serviceId, CancellationToken ct)
     {
@@ -281,6 +282,78 @@ public class AppointmentsController(DentistServicesDbContext db, IAppointmentEve
             query = query.Where(x => x.DentistId == dentistId);
         }
         return Ok(await query.OrderBy(x => x.StartAtUtc).ToListAsync(ct));
+    }
+
+    [HttpPut("appointments/{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> Update(Guid id, [FromBody] UpdateAppointmentRequest request, CancellationToken ct)
+    {
+        var dentistId = HeaderGuid("X-Dentist-Id");
+        if (dentistId is null || dentistId.Value != request.DentistId)
+            return BadRequest(new { message = "Header X-Dentist-Id ausente ou diferente do dentista informado." });
+
+        var item = await db.Appointments.FirstOrDefaultAsync(x => x.Id == id && x.DentistId == dentistId, ct);
+        if (item is null)
+            return NotFound(new { message = "Agendamento não encontrado." });
+        if (item.Status is AppointmentStatus.Rejected or AppointmentStatus.Cancelled)
+            return Conflict(new { message = "Agendamento encerrado não pode ser alterado." });
+        if (!Enum.TryParse<AppointmentType>(request.Type, true, out var type))
+            return BadRequest(new { message = "Tipo deve ser Private ou Insurance." });
+        if (type == AppointmentType.Insurance &&
+            (string.IsNullOrWhiteSpace(request.InsuranceName) || string.IsNullOrWhiteSpace(request.InsuranceCardNumber) ||
+             request.InsuranceName.Length > 120 || request.InsuranceCardNumber.Length > 80))
+            return BadRequest(new { message = "Convênio e carteirinha são obrigatórios (máximo de 120 e 80 caracteres)." });
+        if (type == AppointmentType.Private && (request.InsuranceName is not null || request.InsuranceCardNumber is not null))
+            return BadRequest(new { message = "Dados de convênio não se aplicam a consulta particular." });
+        if (!DateTimeOffset.TryParse(request.StartAt, CultureInfo.InvariantCulture, DateTimeStyles.None, out var startAt) ||
+            !(request.StartAt.EndsWith("Z", StringComparison.OrdinalIgnoreCase) || request.StartAt.Contains('+') || request.StartAt.LastIndexOf('-') > 9))
+            return BadRequest(new { message = "StartAt deve incluir offset ISO 8601." });
+
+        var service = await db.DentistServices.AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == request.ServiceId && x.DentistId == dentistId &&
+                                      x.Status == DentistServiceStatus.disponivel && x.DeletedAt == default, ct);
+        if (service is null)
+            return NotFound(new { message = "Serviço indisponível ou não encontrado." });
+
+        var start = startAt.UtcDateTime;
+        var now = DateTime.UtcNow;
+        if (start <= now || start > now.AddDays(30))
+            return BadRequest(new { message = "Data fora do horizonte de 30 dias." });
+
+        var local = TimeZoneInfo.ConvertTime(startAt, ClinicZone);
+        var date = DateOnly.FromDateTime(local.DateTime);
+        var exception = await db.ScheduleExceptions.AsNoTracking()
+            .FirstOrDefaultAsync(x => x.DentistId == dentistId && x.Date == date, ct);
+        var hours = await db.WeeklyHours.AsNoTracking()
+            .FirstOrDefaultAsync(x => x.DentistId == dentistId && x.DayOfWeek == (int)date.DayOfWeek, ct);
+        var windowStart = exception is not null ? exception.StartTime : hours?.StartTime;
+        var windowEnd = exception is not null ? exception.EndTime : hours?.EndTime;
+        var requestedLocalTime = TimeOnly.FromDateTime(local.DateTime);
+        var end = start.AddMinutes(service.DurationMinutes);
+        var open = (exception is null || !exception.IsClosed) && windowStart is not null && windowEnd is not null &&
+                   windowStart <= requestedLocalTime &&
+                   windowEnd >= TimeOnly.FromDateTime(local.DateTime.AddMinutes(service.DurationMinutes));
+        var offsetTicks = windowStart is null ? -1 : requestedLocalTime.Ticks - windowStart.Value.Ticks;
+        var aligned = offsetTicks >= 0 && offsetTicks % TimeSpan.FromMinutes(service.DurationMinutes).Ticks == 0 &&
+                      local.Second == 0 && local.Millisecond == 0;
+        if (!open || !aligned)
+            return Conflict(new { message = "Horário fora dos horários disponíveis." });
+
+        await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
+        var overlap = await db.Appointments.AnyAsync(x => x.Id != id && x.DentistId == dentistId &&
+            (x.Status == AppointmentStatus.Pending || x.Status == AppointmentStatus.Confirmed) &&
+            x.StartAtUtc < end && x.EndAtUtc > start, ct);
+        if (overlap)
+            return Conflict(new { message = "Horário ocupado." });
+
+        item.UpdateSchedule(request.ServiceId, start, end, type, type == AppointmentType.Private ? service.Price : 0,
+            request.InsuranceName, request.InsuranceCardNumber);
+        await db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
+        return Ok(item);
     }
 
     [HttpPost("appointments/{id:guid}/confirm")]

@@ -8,7 +8,7 @@
       "_id": "wrk_odontologia",
       "_type": "workspace",
       "name": "Odontologia Integrada",
-      "description": "Collection dos quatro serviços: BFF (NestJS), Dentist-service, Employee-service e PaymentService (.NET). Configure o ambiente \"Local\" e obtenha um token por perfil no grupo Auth (dentista1/dentist, funcionario1/employ, paciente1/patient).",
+      "description": "Collection dos serviços BFF (NestJS), Dentist-service, Employee-service, Patient-service e PaymentService (.NET). Configure o ambiente \"Local\" e obtenha um token por perfil no grupo Auth (dentista1/dentist, funcionario1/employ, paciente1/patient).",
       "scope": "collection"
     },
     {
@@ -20,6 +20,7 @@
         "bff_url": "http://localhost:3000",
         "dentist_url": "http://localhost:5068",
         "employee_url": "http://localhost:5070",
+        "patient_url": "http://localhost:5072",
         "payment_url": "http://localhost:5127",
         "keycloak_url": "http://localhost:8080",
         "realm": "dentist",
@@ -168,6 +169,14 @@
       "name": "GET /health (público)",
       "method": "GET",
       "url": "{{ bff_url }}/health"
+    },
+    {
+      "_id": "req_bff_metrics",
+      "_type": "request",
+      "parentId": "fld_bff",
+      "name": "GET /metrics (Prometheus)",
+      "method": "GET",
+      "url": "{{ bff_url }}/metrics"
     },
     {
       "_id": "fld_bff_dentist",
@@ -744,6 +753,28 @@
       ]
     },
     {
+      "_id": "req_dentist_appt_update",
+      "_type": "request",
+      "parentId": "fld_dentist",
+      "name": "PUT /api/appointments/:id",
+      "method": "PUT",
+      "url": "{{ dentist_url }}/api/appointments/{{ appointment_id }}",
+      "headers": [
+        {
+          "name": "X-Dentist-Id",
+          "value": "{{ dentist_id }}"
+        },
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"dentistId\": \"{{ dentist_id }}\",\n  \"serviceId\": \"{{ service_id }}\",\n  \"startAt\": \"2026-11-02T10:00:00-03:00\",\n  \"type\": \"Private\",\n  \"insuranceName\": null,\n  \"insuranceCardNumber\": null\n}"
+      }
+    },
+    {
       "_id": "req_dentist_appt_confirm",
       "_type": "request",
       "parentId": "fld_dentist",
@@ -784,6 +815,22 @@
           "value": "{{ dentist_id }}"
         }
       ]
+    },
+    {
+      "_id": "req_dentist_health",
+      "_type": "request",
+      "parentId": "fld_dentist",
+      "name": "GET /health",
+      "method": "GET",
+      "url": "{{ dentist_url }}/health"
+    },
+    {
+      "_id": "req_dentist_metrics",
+      "_type": "request",
+      "parentId": "fld_dentist",
+      "name": "GET /metrics (Prometheus)",
+      "method": "GET",
+      "url": "{{ dentist_url }}/metrics"
     },
     {
       "_id": "fld_employee",
@@ -852,6 +899,90 @@
       "url": "{{ employee_url }}/api/employees/{{ employee_id }}"
     },
     {
+      "_id": "req_emp_appt_update",
+      "_type": "request",
+      "parentId": "fld_employee",
+      "name": "PUT /api/appointments/:id",
+      "method": "PUT",
+      "url": "{{ employee_url }}/api/appointments/{{ appointment_id }}",
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"dentistId\": \"{{ dentist_id }}\",\n  \"serviceId\": \"{{ service_id }}\",\n  \"startAt\": \"2026-11-02T10:00:00-03:00\",\n  \"type\": \"Private\",\n  \"insuranceName\": null,\n  \"insuranceCardNumber\": null\n}"
+      }
+    },
+    {
+      "_id": "fld_patient",
+      "_type": "request_group",
+      "parentId": "wrk_odontologia",
+      "name": "Patient-service (.NET)"
+    },
+    {
+      "_id": "req_patient_list",
+      "_type": "request",
+      "parentId": "fld_patient",
+      "name": "GET /api/patients",
+      "method": "GET",
+      "url": "{{ patient_url }}/api/patients"
+    },
+    {
+      "_id": "req_patient_get",
+      "_type": "request",
+      "parentId": "fld_patient",
+      "name": "GET /api/patients/:id",
+      "method": "GET",
+      "url": "{{ patient_url }}/api/patients/{{ patient_id }}"
+    },
+    {
+      "_id": "req_patient_create",
+      "_type": "request",
+      "parentId": "fld_patient",
+      "name": "POST /api/patients",
+      "method": "POST",
+      "url": "{{ patient_url }}/api/patients",
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"name\": \"Carlos Pereira\",\n  \"cpf\": \"987.654.321-00\",\n  \"email\": \"carlos.pereira@email.com\",\n  \"phone\": \"(43) 98888-7777\",\n  \"birthDate\": \"1990-05-20\",\n  \"status\": \"ativo\",\n  \"insuranceName\": \"Unimed\",\n  \"insuranceCardNumber\": \"0001234\"\n}"
+      }
+    },
+    {
+      "_id": "req_patient_update",
+      "_type": "request",
+      "parentId": "fld_patient",
+      "name": "PUT /api/patients/:id",
+      "method": "PUT",
+      "url": "{{ patient_url }}/api/patients/{{ patient_id }}",
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"name\": \"Carlos Pereira Lima\",\n  \"email\": \"carlos.lima@email.com\",\n  \"phone\": \"43988887777\",\n  \"birthDate\": \"1990-05-20\",\n  \"status\": \"ativo\"\n}"
+      }
+    },
+    {
+      "_id": "req_patient_delete",
+      "_type": "request",
+      "parentId": "fld_patient",
+      "name": "DELETE /api/patients/:id",
+      "method": "DELETE",
+      "url": "{{ patient_url }}/api/patients/{{ patient_id }}"
+    },
+    {
       "_id": "fld_payment",
       "_type": "request_group",
       "parentId": "wrk_odontologia",
@@ -908,6 +1039,22 @@
         "mimeType": "application/json",
         "text": "{\n  \"status\": \"Paid\"\n}"
       }
+    },
+    {
+      "_id": "req_pay_health",
+      "_type": "request",
+      "parentId": "fld_payment",
+      "name": "GET /health",
+      "method": "GET",
+      "url": "{{ payment_url }}/health"
+    },
+    {
+      "_id": "req_pay_metrics",
+      "_type": "request",
+      "parentId": "fld_payment",
+      "name": "GET /metrics (Prometheus)",
+      "method": "GET",
+      "url": "{{ payment_url }}/metrics"
     }
   ]
 }

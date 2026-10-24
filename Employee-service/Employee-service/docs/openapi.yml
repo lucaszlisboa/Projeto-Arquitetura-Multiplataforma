@@ -19,6 +19,8 @@ servers:
 tags:
   - name: Employees
     description: Gerenciamento de funcionários da clínica
+  - name: Appointments
+    description: Solicitações de alteração de agendamentos
 
 paths:
 
@@ -116,6 +118,39 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /api/appointments/{id}:
+    put:
+      tags:
+        - Appointments
+      summary: Solicitar alteração de agendamento
+      description: Encaminha a solicitação ao Dentist Service, que valida e persiste a alteração.
+      operationId: UpdateAppointment
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: GUID do agendamento
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAppointmentRequest'
+      responses:
+        '200':
+          description: Agendamento atualizado pelo Dentist Service
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          description: Dentist Service indisponível
+
     put:
       tags:
         - Employees
@@ -187,6 +222,34 @@ components:
       example: 7c9e6679-7425-40de-944b-e07fc1f90ae7
 
   schemas:
+
+    UpdateAppointmentRequest:
+      type: object
+      required:
+        - dentistId
+        - serviceId
+        - startAt
+        - type
+      properties:
+        dentistId:
+          type: string
+          format: uuid
+        serviceId:
+          type: string
+          format: uuid
+        startAt:
+          type: string
+          format: date-time
+          description: Offset ISO 8601 obrigatório
+        type:
+          type: string
+          enum: [Private, Insurance]
+        insuranceName:
+          type: string
+          nullable: true
+        insuranceCardNumber:
+          type: string
+          nullable: true
 
     EmployeeRole:
       type: string

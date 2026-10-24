@@ -30,6 +30,32 @@ public record UpdateEmployeeRequest(
     EmployeeStatus Status
 );
 
+/// <summary>Solicita ao Dentist Service a alteração de um agendamento.</summary>
+public sealed record UpdateAppointmentRequest(
+    Guid DentistId,
+    Guid ServiceId,
+    string StartAt,
+    string Type,
+    string? InsuranceName,
+    string? InsuranceCardNumber
+);
+
+/// <summary>Dados do agendamento retornados pelo Dentist Service.</summary>
+public sealed record AppointmentResponse(
+    Guid Id,
+    Guid DentistId,
+    Guid PatientId,
+    Guid ServiceId,
+    DateTime StartAtUtc,
+    DateTime EndAtUtc,
+    string Type,
+    string Status,
+    int PriceCents,
+    string? InsuranceName,
+    string? InsuranceCardNumber,
+    DateTime CreatedAtUtc
+);
+
 // ──────────────────────────────────────────────
 // Response
 // ──────────────────────────────────────────────

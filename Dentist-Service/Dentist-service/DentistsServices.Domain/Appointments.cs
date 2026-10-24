@@ -53,5 +53,15 @@ public class Appointment
         Status = AppointmentStatus.Pending; CreatedAtUtc = DateTime.UtcNow;
     }
     public void SetStatus(AppointmentStatus status) => Status = status;
+    public void UpdateSchedule(Guid serviceId, DateTime startAtUtc, DateTime endAtUtc, AppointmentType type, int priceCents, string? insuranceName, string? insuranceCardNumber)
+    {
+        ServiceId = serviceId;
+        StartAtUtc = startAtUtc;
+        EndAtUtc = endAtUtc;
+        Type = type;
+        PriceCents = priceCents;
+        InsuranceName = insuranceName;
+        InsuranceCardNumber = insuranceCardNumber;
+    }
     public bool BlocksTime => Status is AppointmentStatus.Pending or AppointmentStatus.Confirmed;
 }

@@ -1,8 +1,10 @@
 using Employee_service.Employees.Application.UseCases;
+using Employee_service.Employees.Application.Services;
 using Employee_service.Employees.Domain.Ports;
 using Employee_service.Employees.Domain.Validators;
 using Employee_service.Employees.Infrastructure.Data;
 using Employee_service.Employees.Infrastructure.Repositories;
+using Employee_service.Employees.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -25,6 +27,11 @@ builder.Services.AddScoped<IEmployeeValidator, EmployeeValidator>();
 
 // Porta de entrada: caso de uso
 builder.Services.AddScoped<IEmployeeUseCase, EmployeeUseCase>();
+builder.Services.AddHttpClient<IAppointmentService, DentistAppointmentService>(client =>
+{
+    var baseUrl = builder.Configuration["DentistService:BaseUrl"] ?? "http://localhost:5068";
+    client.BaseAddress = new Uri($"{baseUrl.TrimEnd('/')}/");
+});
 
 // ──────────────────────────────────────────────
 // API

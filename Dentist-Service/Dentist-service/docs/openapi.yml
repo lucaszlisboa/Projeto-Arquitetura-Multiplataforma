@@ -121,6 +121,34 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '409': { description: Horário indisponível ou ocupado }
 
+  /api/appointments/{id}:
+    put:
+      tags: [Appointments]
+      summary: Alterar um agendamento existente
+      description: Atualiza o serviço, horário e tipo do agendamento após validar disponibilidade e regras do Dentist Service.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: X-Dentist-Id, in: header, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [dentistId, serviceId, startAt, type]
+              properties:
+                dentistId: { type: string, format: uuid }
+                serviceId: { type: string, format: uuid }
+                startAt: { type: string, format: date-time, description: Offset ISO 8601 obrigatório }
+                type: { type: string, enum: [Private, Insurance] }
+                insuranceName: { type: string, nullable: true }
+                insuranceCardNumber: { type: string, nullable: true }
+      responses:
+        '200': { description: Agendamento atualizado }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: Estado inválido ou horário indisponível }
+
   /api/appointments/{id}/{action}:
     post:
       tags: [Appointments]

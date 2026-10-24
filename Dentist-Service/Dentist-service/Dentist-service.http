@@ -1,1 +1,18 @@
 @Dentist_service_HostAddress = http://localhost:5068
+@appointmentId = 00000000-0000-0000-0000-000000000000
+@dentistId = 00000000-0000-0000-0000-000000000000
+@serviceId = 00000000-0000-0000-0000-000000000000
+
+### Alterar agendamento existente
+PUT {{Dentist_service_HostAddress}}/api/appointments/{{appointmentId}}
+X-Dentist-Id: {{dentistId}}
+Content-Type: application/json
+
+{
+  "dentistId": "{{dentistId}}",
+  "serviceId": "{{serviceId}}",
+  "startAt": "2026-11-02T10:00:00-03:00",
+  "type": "Private",
+  "insuranceName": null,
+  "insuranceCardNumber": null
+}
