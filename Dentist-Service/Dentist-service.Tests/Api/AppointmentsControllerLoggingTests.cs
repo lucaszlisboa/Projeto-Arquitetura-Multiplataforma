@@ -3,6 +3,7 @@ using Dentist_service.DentistsServices.Api.Telemetry;
 using Dentist_service.DentistsServices.Domain;
 using Dentist_service.DentistsServices.Domain.Ports;
 using Dentist_service.DentistsServices.Infrastructure.Data;
+using Dentist_service.DentistsServices.Infrastructure.Payments;
 using Dentist_service.Tests.Helpers;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
@@ -24,6 +25,7 @@ public class AppointmentsControllerLoggingTests : IDisposable
     private readonly DentistServicesDbContext _db;
     private readonly FakeLogger<AppointmentsController> _logger = new();
     private readonly Mock<IAppointmentEventPublisher> _events = new();
+    private readonly Mock<IPaymentServiceClient> _paymentService = new();
     private readonly AppointmentsController _controller;
 
     public AppointmentsControllerLoggingTests()
@@ -38,7 +40,7 @@ public class AppointmentsControllerLoggingTests : IDisposable
             _db.WeeklyHours.Add(new DentistWeeklyHours(DentistServicesFactory.DefaultDentistId, day, new TimeOnly(8, 0), new TimeOnly(18, 0)));
         _db.SaveChanges();
 
-        _controller = new AppointmentsController(_db, _events.Object, new AppointmentMetrics(), _logger)
+        _controller = new AppointmentsController(_db, _events.Object, _paymentService.Object, new AppointmentMetrics(), _logger)
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
         };

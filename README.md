@@ -195,7 +195,7 @@ dotnet run                               # aplica migrations e sobe em http://lo
 ### PaymentService (`:5127`)
 
 ```bash
-cd PaymentService
+cd Payment-Service
 dotnet run                               # http://localhost:5127
 ```
 
@@ -218,6 +218,18 @@ Quando iniciado pelo Docker Compose, o WireMock escuta em
 (`400`) e pagamento inexistente (`404`). O identificador usado nas respostas
 determinísticas é `00000000-0000-0000-0000-000000000001`. Para escolher outra
 porta ao executar localmente, defina `WIREMOCK_PORT`.
+
+O Dentist-service chama `POST /api/payments` no PaymentService e recebe a
+resposta HTTP. Em Development, `PaymentService:BaseUrl` já aponta para
+`http://localhost:5128`, portanto inicie o WireMock antes do Dentist-service:
+
+```bash
+docker compose -f Payment-Service/docker-compose.yml up payment-service-wiremock
+```
+
+Para usar o serviço real, altere `PaymentService:BaseUrl` para
+`http://localhost:5127`. Depois, `PATCH /api/payments/{id}/status` publica `PaymentApproved` ou
+`PaymentFailed` no tópico `payments`, que o Dentist-service consome.
 
 ### BFF (`:3000`)
 

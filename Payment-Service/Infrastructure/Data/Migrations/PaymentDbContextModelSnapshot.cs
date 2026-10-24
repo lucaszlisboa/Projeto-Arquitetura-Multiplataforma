@@ -118,6 +118,7 @@ namespace PaymentService.Infrastructure.Data.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("AppointmentId")
+                        .IsUnique()
                         .HasDatabaseName("ix_payments_appointment_id");
 
                     b.ToTable("payments", (string)null);
