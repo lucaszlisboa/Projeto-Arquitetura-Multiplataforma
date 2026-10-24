@@ -203,6 +203,22 @@ O `Program.cs` aplica as migrations automaticamente no boot — assim como o
 Dentist-service e o Employee-service. Os logs vão para `logs/payment-service/`
 (`Observability:LogDirectory` = `../logs` no `appsettings.Development.json`).
 
+Para usar respostas HTTP falsas, sem PostgreSQL, Kafka ou migrations:
+
+```bash
+dotnet run --project Payment-Service/PaymentService.WireMock/PaymentService.WireMock.csproj
+# ou, incluindo o banco do serviço real:
+docker compose -f Payment-Service/docker-compose.yml up payment-service-wiremock
+```
+
+Quando iniciado pelo Docker Compose, o WireMock escuta em
+`http://localhost:5128` e cobre `GET /api/payments`,
+`GET /api/payments/{id}`, `POST /api/payments` e
+`PATCH /api/payments/{id}/status`, incluindo respostas de sucesso, validação
+(`400`) e pagamento inexistente (`404`). O identificador usado nas respostas
+determinísticas é `00000000-0000-0000-0000-000000000001`. Para escolher outra
+porta ao executar localmente, defina `WIREMOCK_PORT`.
+
 ### BFF (`:3000`)
 
 ```bash
