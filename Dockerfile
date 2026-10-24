@@ -5,8 +5,12 @@
 # no mesmo container, gerenciados pelo supervisor.
 #
 #   docker build -t odontologia .
-#   docker run -p 3000:3000 -p 5068:5068 -p 5070:5070 -p 5127:5127 \
-#              -p 8080:8080 -p 9092:9092 odontologia
+#   docker run -p 3000:3000 -p 8080:8080 odontologia
+#
+# O BFF é o ÚNICO ponto de entrada da aplicação: só ele (3000) e o Keycloak
+# (8080, login) escutam em todas as interfaces. As APIs .NET, o Postgres e o
+# Kafka escutam apenas em 127.0.0.1 — o BFF as alcança por dentro do container,
+# mas elas ficam inacessíveis de fora, mesmo que alguém publique a porta com -p.
 #
 # O target "bff" continua disponível apenas para desenvolvimento isolado do BFF:
 #   docker build --target bff -t bff .
@@ -177,7 +181,7 @@ RUN cat > /app/kafka.properties <<'EOF'
 process.roles=broker,controller
 node.id=1
 controller.quorum.bootstrap.servers=127.0.0.1:9093
-listeners=PLAINTEXT://0.0.0.0:9092,CONTROLLER://127.0.0.1:9093
+listeners=PLAINTEXT://127.0.0.1:9092,CONTROLLER://127.0.0.1:9093
 advertised.listeners=PLAINTEXT://localhost:9092
 listener.security.protocol.map=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
 controller.listener.names=CONTROLLER
@@ -360,7 +364,7 @@ redirect_stderr=true
 stdout_logfile=/dev/stdout
 stdout_logfile_maxbytes=0
 stdout_logfile_backups=0
-environment=ASPNETCORE_URLS="http://0.0.0.0:5068",ConnectionStrings__DefaultConnection="%(ENV_DENTIST_CONNECTION_STRING)s",Kafka__BootstrapServers="%(ENV_KAFKA_BOOTSTRAP_SERVERS)s",Kafka__Enabled="%(ENV_KAFKA_ENABLED)s"
+environment=ASPNETCORE_URLS="http://127.0.0.1:5068",ConnectionStrings__DefaultConnection="%(ENV_DENTIST_CONNECTION_STRING)s",Kafka__BootstrapServers="%(ENV_KAFKA_BOOTSTRAP_SERVERS)s",Kafka__Enabled="%(ENV_KAFKA_ENABLED)s"
 
 [program:employee-service]
 directory=/app/employee
@@ -378,7 +382,7 @@ redirect_stderr=true
 stdout_logfile=/dev/stdout
 stdout_logfile_maxbytes=0
 stdout_logfile_backups=0
-environment=ASPNETCORE_URLS="http://0.0.0.0:5070",ConnectionStrings__DefaultConnection="%(ENV_EMPLOYEE_CONNECTION_STRING)s"
+environment=ASPNETCORE_URLS="http://127.0.0.1:5070",ConnectionStrings__DefaultConnection="%(ENV_EMPLOYEE_CONNECTION_STRING)s"
 
 [program:payment-service]
 directory=/app/payment
@@ -397,13 +401,14 @@ redirect_stderr=true
 stdout_logfile=/dev/stdout
 stdout_logfile_maxbytes=0
 stdout_logfile_backups=0
-environment=ASPNETCORE_URLS="http://0.0.0.0:5127",ConnectionStrings__DefaultConnection="%(ENV_PAYMENT_CONNECTION_STRING)s",Kafka__BootstrapServers="%(ENV_KAFKA_BOOTSTRAP_SERVERS)s",Kafka__Enabled="%(ENV_KAFKA_ENABLED)s"
+environment=ASPNETCORE_URLS="http://127.0.0.1:5127",ConnectionStrings__DefaultConnection="%(ENV_PAYMENT_CONNECTION_STRING)s",Kafka__BootstrapServers="%(ENV_KAFKA_BOOTSTRAP_SERVERS)s",Kafka__Enabled="%(ENV_KAFKA_ENABLED)s"
 EOF
 
 RUN chmod +x /app/scripts/*.sh
 
 USER app
-EXPOSE 3000 5068 5070 5127 8080 9092
+# Somente BFF e Keycloak são expostos; os demais processos escutam em 127.0.0.1.
+EXPOSE 3000 8080
 
 HEALTHCHECK --interval=30s --timeout=15s --start-period=180s --retries=3 \
   CMD ["/app/scripts/healthcheck.sh"]
