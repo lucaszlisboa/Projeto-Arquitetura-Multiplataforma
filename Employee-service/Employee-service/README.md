@@ -6,8 +6,8 @@ API REST para gerenciamento de funcionários da clínica (**Odontologia Integrad
 
 ## Pré-requisitos
 
-- [.NET 10 SDK](https://dotnet.microsoft.com/download)
-- [Docker](https://www.docker.com/) e Docker Compose
+- [Docker](https://www.docker.com/) e Docker Compose v2
+- [.NET 10 SDK](https://dotnet.microsoft.com/download) (somente para executar no host)
 - [dotnet-ef CLI](https://learn.microsoft.com/ef/core/cli/dotnet) (versão 10)
 
 ---
@@ -45,13 +45,13 @@ docs/                      # OpenAPI e collection do Postman
 
 ### 1. Banco de dados
 
-Suba o PostgreSQL via Docker Compose:
+Suba o banco pelo Compose único, a partir da raiz do repositório:
 
 ```bash
-docker compose up -d
+docker compose up -d employee-db
 ```
 
-Isso cria um container PostgreSQL 12 com:
+Isso cria um container PostgreSQL 16 com:
 
 | Parâmetro | Valor              |
 |-----------|--------------------|
@@ -61,7 +61,7 @@ Isso cria um container PostgreSQL 12 com:
 | Usuário   | postgres           |
 | Senha     | postgres           |
 
-> A porta **5434** evita conflito com o banco do Dentist-service (5432) e o do Keycloak (5433).
+> A porta **5434** evita conflito com os demais bancos publicados pelo Compose único.
 
 ### 2. Connection string
 
@@ -231,11 +231,7 @@ DELETE /api/employees/7c9e6679-7425-40de-944b-e07fc1f90ae7
 ## Parando o banco
 
 ```bash
-docker compose down
+docker compose stop employee-service employee-db
 ```
 
-Para remover também os dados persistidos:
-
-```bash
-docker compose down -v
-```
+O volume do banco permanece. `docker compose down -v`, executado na raiz, remove os volumes de toda a stack.

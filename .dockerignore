@@ -19,7 +19,6 @@ Dentist-service.Tests/
 bff/test/
 bff/docs/
 bff/*.md
-bff/docker-compose*.yml
 
 # Infraestrutura e documentação (não entram nas imagens)
 elk/
@@ -27,13 +26,10 @@ kafka/
 observability/
 logs/
 docs/
-Patient-Service/
+compose.yaml
 **/*.md
-docker-compose*.yml
-docker-compose*.yaml
 
 # Do Keycloak, só o realm importado é usado na imagem.
-keycloak/docker-compose.yaml
 keycloak/seed.sh
 
 # IDE / SO

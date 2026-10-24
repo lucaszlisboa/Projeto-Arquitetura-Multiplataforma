@@ -14,6 +14,8 @@ var builder = WebApplication.CreateBuilder(args);
 // ──────────────────────────────────────────────
 builder.Services.AddDbContext<EmployeeDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+builder.Services.AddHealthChecks()
+    .AddDbContextCheck<EmployeeDbContext>("postgres");
 
 // ──────────────────────────────────────────────
 // Portas → Adaptadores (Hexagonal)
@@ -59,8 +61,12 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
-app.UseHttpsRedirection();
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 
 app.MapControllers();
+app.MapHealthChecks("/health");
 
 app.Run();

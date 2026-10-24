@@ -1,12 +1,11 @@
 # Observabilidade — Prometheus + Grafana
 
-Stack de monitoramento ponta a ponta dos fluxos de **agendamento** (Dentist-service)
-e **pagamento** (PaymentService), incluindo a **mensageria** (outbox, consumer e DLQ)
-e o **BFF**.
+Stack ativada pelo perfil `observability` no `compose.yaml` da raiz. Monitora os fluxos de
+**agendamento** (Dentist-service), **pagamento** (Payment-service), mensageria e BFF.
 
 ```
 ┌───────────────┐   scrape /metrics   ┌──────────────┐   query   ┌──────────┐
-│  Apps (host)  │◀────────────────────│  Prometheus  │◀──────────│ Grafana  │
+│ Apps (Docker) │◀────────────────────│  Prometheus  │◀──────────│ Grafana  │
 │ :5068 :5127   │                     │    :9090     │           │  :3001   │
 │ :3000 (BFF)   │   ┌──────────────┐  └──────────────┘           └──────────┘
 └───────────────┘   │ kafka-exporter│◀──────┘
@@ -32,36 +31,15 @@ e o **BFF**.
 
 ## Subindo a stack
 
-Pré-requisito: o Kafka precisa estar no ar (`kafka/docker-compose.yaml`) para o
-`kafka-exporter` conectar.
-
 ```bash
-# Da raiz do repositório
-docker compose -f observability/docker-compose.yaml up -d
+docker compose --profile observability up -d
 
 # Logs / status
-docker compose -f observability/docker-compose.yaml ps
+docker compose --profile observability ps
 ```
 
-### Apps precisam escutar em todas as interfaces
-
-As APIs e o BFF rodam **no host**, e o Prometheus (em container) as alcança via
-`host.docker.internal`. Para isso, **não** suba as apps presas ao `localhost`;
-escute em `0.0.0.0`:
-
-```bash
-# Dentist-service  (:5068)
-(cd Dentist-Service/Dentist-service && ASPNETCORE_URLS=http://0.0.0.0:5068 dotnet run --no-launch-profile)
-
-# PaymentService   (:5127)
-(cd PaymentService && ASPNETCORE_URLS=http://0.0.0.0:5127 dotnet run --no-launch-profile)
-
-# BFF              (:3000)
-(cd bff && pnpm run start:dev)
-```
-
-> Em **desenvolvimento**, o redirecionamento para HTTPS é dispensado para que o
-> scrape via HTTP funcione. Em produção ele continua ativo.
+Os serviços e Prometheus compartilham a rede Docker. O Prometheus consulta `dentist-service:5068`,
+`payment-service:5127` e `bff:3000`; não é necessário iniciar APIs no host.
 
 Cada app expõe:
 

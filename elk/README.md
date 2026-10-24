@@ -1,18 +1,16 @@
 # ELK — logs da Odontologia Integrada
 
 Stack **Elasticsearch + Logstash + Kibana + Filebeat** (8.17.4) para centralizar os logs
-estruturados dos serviços. Os serviços .NET e o BFF continuam rodando no host; eles gravam
-arquivos JSON em `logs/` na raiz do repositório e o Filebeat (container) lê esses arquivos.
+estruturados das aplicações. A stack e as aplicações são definidas no `compose.yaml` da raiz;
+os serviços gravam arquivos JSON em um volume compartilhado com o Filebeat.
 
 ```mermaid
 flowchart LR
-    subgraph Host
-        BFF[BFF] -->|logs/bff/bff.log| L[(logs/)]
-        DS[Dentist-service] -->|logs/dentist-service/*.json| L
-        PS[PaymentService] -->|logs/payment-service/*.json| L
-    end
-    subgraph Docker[odontologia-elk-network]
-        L -->|bind mount ro| FB[Filebeat]
+    subgraph Docker[Compose]
+        BFF[BFF] --> L[(app-logs)]
+        DS[Dentist-service] --> L
+        PS[Payment-service] --> L
+        L -->|volume ro| FB[Filebeat]
         FB --> LS[Logstash :5044]
         LS --> ES[(Elasticsearch :9200)]
         ES --> KB[Kibana :5601]
@@ -24,18 +22,17 @@ em [`docs/logging-standard.md`](docs/logging-standard.md).
 
 ## Subir
 
-Pré-requisito: Docker com **~3 GB** livres de memória (ES 1 GB de heap, Logstash 512 MB,
-Kibana 1 GB).
+Pré-requisito: Docker com memória suficiente para Elasticsearch, Logstash e Kibana. Os heaps
+iniciais estão reduzidos para desenvolvimento; ajuste `ES_JAVA_OPTS` e `LS_JAVA_OPTS` no
+`.env` da raiz se necessário.
 
 ```bash
-cd elk
-cp .env.example .env     # opcional: só para trocar versão, portas ou memória
-docker compose up -d
+docker compose --profile elk up -d
 ```
 
 Ordem automática: `elasticsearch` → `es-setup` (política ILM e index template) →
 `logstash` → `filebeat`; e `kibana` → `kibana-setup` (data view, buscas e dashboard).
-A primeira subida leva alguns minutos. Acompanhe com `docker compose ps`.
+A primeira subida leva alguns minutos. Acompanhe com `docker compose --profile elk ps`.
 
 | Serviço | URL | Observação |
 |---|---|---|
@@ -47,16 +44,12 @@ A primeira subida leva alguns minutos. Acompanhe com `docker compose ps`.
 
 | Serviço | Configuração | Arquivo |
 |---|---|---|
-| Dentist-service | `Observability:LogDirectory` = `../../logs` (appsettings.Development.json) | `logs/dentist-service/*.json` |
-| PaymentService | `Observability:LogDirectory` = `../logs` | `logs/payment-service/*.json` |
-| BFF | `LOG_DIR=../logs` (`bff/.env`) | `logs/bff/bff.log` |
+| Dentist-service | `Observability__LogDirectory=/app/logs` no Compose | `dentist-service/*.json` |
+| Payment-service | `Observability__LogDirectory=/app/logs` no Compose | `payment-service/*.json` |
+| BFF | `LOG_DIR=/app/logs` no Compose | `bff/bff.log` |
 
-Os caminhos são relativos ao diretório do projeto, de onde o serviço é executado
-(`dotnet run` / `pnpm run start:dev`). A pasta `logs/` é ignorada pelo Git. Para usar outra
-pasta, defina `LOGS_DIR` em `elk/.env` e ajuste a configuração dos serviços.
-
-BFF em Docker (`bff/docker-compose.dev.yml`): monta `../logs` em `/app/logs` e usa
-`LOG_DIR=/app/logs`.
+O volume `app-logs` é persistente e compartilhado entre aplicações e Filebeat. Para subir também
+Prometheus e Grafana, use `docker compose --profile observability --profile elk up --build -d`.
 
 ## Consultas no Kibana
 
@@ -79,7 +72,7 @@ O `/health` não é indexado.
 
 | Arquivo | Função |
 |---|---|
-| `docker-compose.yaml` | Serviços, volumes (`es-data`, `filebeat-data`) e rede `odontologia-elk-network`. |
+| `../compose.yaml` | Define ELK, aplicações, perfis e volumes compartilhados. |
 | `filebeat/filebeat.yml` | Três inputs (bff, dentist-service, payment-service), parser NDJSON. |
 | `logstash/pipeline/odonto.conf` | Normaliza `service.name`/`labels.correlation_id`, mascara PII, roteia para `logs-<servico>-dev`. |
 | `elasticsearch/` | Política ILM (7 dias), index template e `setup.sh`. |
@@ -89,15 +82,13 @@ O `/health` não é indexado.
 
 - **Elasticsearch reinicia no Linux/WSL2:** `sudo sysctl -w vm.max_map_count=262144`
   (no WSL2: `wsl -d docker-desktop sysctl -w vm.max_map_count=262144`).
-- **Não aparece nada no Kibana:** confirme que existem arquivos em `logs/<servico>/`,
-  veja `docker compose logs filebeat logstash` e o horário do filtro do Discover
+- **Não aparece nada no Kibana:** confirme que as aplicações estão saudáveis,
+  veja `docker compose --profile elk logs filebeat logstash` e o horário do filtro do Discover
   (padrão: últimas 24 h). O Filebeat varre a pasta a cada 5 s (bind mount no Windows não
   gera eventos de inotify).
-- **Reprocessar arquivos já lidos:** `docker compose down` e remover o volume
-  `odontologia-elk_filebeat-data`.
-- **Zerar tudo:** `docker compose down -v` (apaga índices e offsets).
+- **Zerar dados:** `docker compose --profile observability --profile elk down -v` remove todos os volumes, incluindo bancos e Kafka.
 - **Final de linha:** os `.sh` precisam ter final de linha LF (garantido por `.gitattributes`).
-- **Memória insuficiente:** reduza `ES_JAVA_OPTS` e `LS_JAVA_OPTS` em `elk/.env`.
+- **Memória insuficiente:** reduza `ES_JAVA_OPTS` e `LS_JAVA_OPTS` no `.env` da raiz.
 
 ## Produção
 

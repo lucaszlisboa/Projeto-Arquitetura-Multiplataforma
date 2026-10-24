@@ -12,6 +12,8 @@ var builder = WebApplication.CreateBuilder(args);
 // ──────────────────────────────────────────────
 builder.Services.AddDbContext<PatientDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+builder.Services.AddHealthChecks()
+    .AddDbContextCheck<PatientDbContext>("postgres");
 
 // ──────────────────────────────────────────────
 // Portas → Adaptadores (Hexagonal)
@@ -40,13 +42,24 @@ builder.Services.AddOpenApi();
 
 var app = builder.Build();
 
+// Cria/atualiza o schema ao iniciar em um banco novo.
+await using (var scope = app.Services.CreateAsyncScope())
+{
+    var dbContext = scope.ServiceProvider.GetRequiredService<PatientDbContext>();
+    await dbContext.Database.MigrateAsync();
+}
+
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
 }
 
-app.UseHttpsRedirection();
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 
 app.MapControllers();
+app.MapHealthChecks("/health");
 
 app.Run();

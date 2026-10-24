@@ -6,8 +6,8 @@ API REST para gerenciamento de pacientes da clínica (**Odontologia Integrada**)
 
 ## Pré-requisitos
 
-- [.NET 10 SDK](https://dotnet.microsoft.com/download)
-- [Docker](https://www.docker.com/) e Docker Compose
+- [Docker](https://www.docker.com/) e Docker Compose v2
+- [.NET 10 SDK](https://dotnet.microsoft.com/download) (somente para executar no host)
 - [dotnet-ef CLI](https://learn.microsoft.com/ef/core/cli/dotnet) (versão 10)
 
 ---
@@ -28,13 +28,13 @@ Migrations/               # Migrations do EF Core
 
 ### 1. Banco de dados
 
-Suba o PostgreSQL via Docker Compose:
+Suba o banco pelo Compose único, a partir da raiz do repositório:
 
 ```bash
-docker compose up -d
+docker compose up -d patient-db
 ```
 
-Isso cria um container PostgreSQL 12 com:
+Isso cria um container PostgreSQL 16 com:
 
 | Parâmetro | Valor             |
 |-----------|-------------------|
@@ -60,7 +60,7 @@ O arquivo `appsettings.json` já está configurado para o banco acima:
 
 ## Migrations
 
-A migration inicial já está na pasta `Migrations/`. Para aplicá-la ao banco:
+A API aplica as migrations ao iniciar (`Database.MigrateAsync()`). Para aplicar manualmente no host:
 
 ```bash
 dotnet tool install --global dotnet-ef   # caso ainda não tenha
