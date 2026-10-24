@@ -1,0 +1,4 @@
+# Arquivos executados dentro de containers Linux precisam de LF, mesmo em
+# checkouts no Windows (core.autocrlf=true). Com CRLF, os scripts gerados por
+# heredoc no Dockerfile da raiz saem com "#!/bin/sh\r" e falham no boot.
+Dockerfile text eol=lf

@@ -246,15 +246,20 @@ ghcr.io/<owner>/<repo>/odontologia
 
 A imagem sobe, no mesmo container e via `supervisor`:
 
-| Processo | Porta | Descrição |
-|---|---|---|
-| Postgres 16 | `5432` | bancos `dentist_service`, `employee_service`, `payment_service` e `keycloak` (acesso apenas interno) |
-| Kafka 4.3 (KRaft) | `9092` | tópicos criados automaticamente no boot |
-| Keycloak 26.6 | `8080` | realm `dentist` importado automaticamente |
-| BFF (NestJS) | `3000` | porta de entrada HTTP (`/health`, `/docs`) |
-| Dentist-service | `5068` | API .NET (migrations no boot) |
-| Employee-service | `5070` | API .NET (migrations no boot) |
-| Payment-service | `5127` | API .NET (migrations no boot) |
+| Processo | Porta | Acesso | Descrição |
+|---|---|---|---|
+| BFF (NestJS) | `3000` | **externo** | único ponto de entrada da aplicação (`/health`, `/docs`) |
+| Keycloak 26.6 | `8080` | **externo** | login / emissão de tokens; realm `dentist` importado automaticamente |
+| Dentist-service | `5068` | interno | API .NET (migrations no boot) |
+| Employee-service | `5070` | interno | API .NET (migrations no boot) |
+| Payment-service | `5127` | interno | API .NET (migrations no boot) |
+| Kafka 4.3 (KRaft) | `9092` | interno | tópicos criados automaticamente no boot |
+| Postgres 16 | `5432` | interno | bancos `dentist_service`, `employee_service`, `payment_service` e `keycloak` |
+
+**O BFF é o único ponto de entrada.** Os processos "internos" escutam apenas em
+`127.0.0.1`: o BFF os alcança por dentro do container, mas eles não respondem a
+chamadas de fora — mesmo que a porta seja publicada com `-p`, a conexão é recusada.
+Assim toda requisição passa pela autenticação e pelo RBAC do BFF.
 
 Tags geradas: `latest` (branch `main`), `sha-<commit>`, `main` e, para tags
 semver (`v1.2.3`), `1.2.3` e `1.2`. Os processos rodam como usuário não-root `app`.
@@ -269,8 +274,7 @@ Executando sem nenhuma configuração extra:
 
 ```bash
 docker run --rm \
-  -p 3000:3000 -p 5068:5068 -p 5070:5070 -p 5127:5127 \
-  -p 8080:8080 -p 9092:9092 \
+  -p 3000:3000 -p 8080:8080 \
   -v odonto-pg:/app/pgdata \
   -v odonto-kafka:/app/kafka-data \
   odontologia
@@ -295,6 +299,9 @@ TOKEN=$(curl -s -X POST http://localhost:8080/realms/dentist/protocol/openid-con
   -d 'username=dentista1' -d 'password=123456' | jq -r .access_token)
 
 curl -H "Authorization: Bearer $TOKEN" http://localhost:3000/api/dentist-services
+
+# Acesso direto a um microsserviço: recusado (não passa pelo BFF)
+curl http://localhost:5127/api/payments   # Connection refused/reset
 ```
 
 > Use `localhost` (e não `127.0.0.1`) ao obter o token: o emissor padrão é
