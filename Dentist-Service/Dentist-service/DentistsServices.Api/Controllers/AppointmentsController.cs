@@ -5,6 +5,7 @@ using Dentist_service.DentistsServices.Api.Telemetry;
 using Dentist_service.DentistsServices.Domain;
 using Dentist_service.DentistsServices.Domain.Ports;
 using Dentist_service.DentistsServices.Infrastructure.Data;
+using Dentist_service.DentistsServices.Infrastructure.Payments;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
@@ -14,7 +15,7 @@ namespace Dentist_service.DentistsServices.Api.Controllers;
 [ApiController]
 [Route("api")]
 [Produces("application/json")]
-public class AppointmentsController(DentistServicesDbContext db, IAppointmentEventPublisher events, AppointmentMetrics metrics, ILogger<AppointmentsController> logger) : ControllerBase
+public class AppointmentsController(DentistServicesDbContext db, IAppointmentEventPublisher events, IPaymentServiceClient paymentService, AppointmentMetrics metrics, ILogger<AppointmentsController> logger) : ControllerBase
 {
     private static readonly TimeZoneInfo ClinicZone = TimeZoneInfo.FindSystemTimeZoneById("America/Sao_Paulo");
     private Guid? HeaderGuid(string name) => Request.Headers.TryGetValue(name, out var value) && Guid.TryParse(value, out var id) ? id : null;
@@ -245,7 +246,7 @@ public class AppointmentsController(DentistServicesDbContext db, IAppointmentEve
             logger.AppointmentSlotConflict(service.DentistId, start, "overlap", null, service.Id);
             return Conflict(new { message = "Horário ocupado." });
         }
-        var appointment = new Appointment(service.DentistId, patientId.Value, service.Id, start, end, type, type == AppointmentType.Private ? service.Price : 0, request.InsuranceName, request.InsuranceCardNumber);
+        var appointment = new Appointment(service.DentistId, patientId.Value, service.Id, start, end, type, type == AppointmentType.Private ? checked(service.Price * 100) : 0, request.InsuranceName, request.InsuranceCardNumber);
         db.Appointments.Add(appointment);
         events.Requested(appointment);
         try { await db.SaveChangesAsync(ct); await tx.CommitAsync(ct); }
@@ -256,6 +257,9 @@ public class AppointmentsController(DentistServicesDbContext db, IAppointmentEve
             return Conflict(new { message = "Horário ocupado." });
         }
         metrics.CreationCreated(typeLabel);
+        if (type == AppointmentType.Private)
+            await paymentService.CreateAsync(appointment, ct);
+
         logger.AppointmentRequested(appointment.Id, appointment.DentistId, appointment.PatientId, appointment.ServiceId, start, type.ToString(),
             (patientHeader is not null ? AppointmentActor.Patient : AppointmentActor.Dentist).ToString());
         return Created($"/api/appointments/{appointment.Id}", appointment);
@@ -349,7 +353,7 @@ public class AppointmentsController(DentistServicesDbContext db, IAppointmentEve
         if (overlap)
             return Conflict(new { message = "Horário ocupado." });
 
-        item.UpdateSchedule(request.ServiceId, start, end, type, type == AppointmentType.Private ? service.Price : 0,
+        item.UpdateSchedule(request.ServiceId, start, end, type, type == AppointmentType.Private ? checked(service.Price * 100) : 0,
             request.InsuranceName, request.InsuranceCardNumber);
         await db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);

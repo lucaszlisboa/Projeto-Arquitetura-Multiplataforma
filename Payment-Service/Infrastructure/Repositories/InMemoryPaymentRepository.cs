@@ -14,6 +14,9 @@ public sealed class InMemoryPaymentRepository : IPaymentRepository
         return Task.FromResult(payment);
     }
 
+    public Task<Payment?> GetByAppointmentIdAsync(Guid appointmentId, CancellationToken cancellationToken = default) =>
+        Task.FromResult(_payments.Values.FirstOrDefault(payment => payment.AppointmentId == appointmentId));
+
     public Task<IReadOnlyList<Payment>> GetAllAsync(CancellationToken cancellationToken = default) =>
         Task.FromResult<IReadOnlyList<Payment>>(_payments.Values
             .OrderByDescending(payment => payment.CreatedAt)

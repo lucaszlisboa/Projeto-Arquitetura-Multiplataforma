@@ -192,6 +192,7 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ConnectionStrings__DefaultConnection: Host=dentist-db;Port=5432;Database=dentist_service;Username=postgres;Password=${POSTGRES_PASSWORD:-postgres}
+      PaymentService__BaseUrl: ${PAYMENT_SERVICE_BASE_URL:-http://payment-service:5127}
       Kafka__BootstrapServers: kafka:19092
       Kafka__Enabled: "true"
       Observability__LogDirectory: /app/logs
@@ -263,6 +264,17 @@ services:
         condition: service_completed_successfully
       logs-init:
         condition: service_completed_successfully
+    restart: unless-stopped
+
+  payment-service-wiremock:
+    build:
+      context: .
+      dockerfile: Payment-Service/PaymentService.WireMock/Dockerfile
+    profiles: [mock]
+    environment:
+      WIREMOCK_PORT: 5127
+    ports:
+      - "${PAYMENT_WIREMOCK_PORT:-5128}:5127"
     restart: unless-stopped
 
   bff:
