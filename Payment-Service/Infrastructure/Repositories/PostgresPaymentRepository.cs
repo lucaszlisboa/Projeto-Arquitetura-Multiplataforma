@@ -12,6 +12,11 @@ public sealed class PostgresPaymentRepository(PaymentDbContext context) : IPayme
         CancellationToken cancellationToken = default) =>
         context.Payments.FirstOrDefaultAsync(payment => payment.Id == id, cancellationToken);
 
+    public Task<Payment?> GetByAppointmentIdAsync(
+        Guid appointmentId,
+        CancellationToken cancellationToken = default) =>
+        context.Payments.FirstOrDefaultAsync(payment => payment.AppointmentId == appointmentId, cancellationToken);
+
     public async Task<IReadOnlyList<Payment>> GetAllAsync(
         CancellationToken cancellationToken = default) =>
         await context.Payments

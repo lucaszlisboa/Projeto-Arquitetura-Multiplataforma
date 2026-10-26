@@ -44,6 +44,7 @@ public sealed class PaymentDbContext(DbContextOptions<PaymentDbContext> options)
                 .HasMaxLength(Payment.FailureReasonMaxLength);
 
             entity.HasIndex(payment => payment.AppointmentId)
+                .IsUnique()
                 .HasDatabaseName("ix_payments_appointment_id");
         });
     }

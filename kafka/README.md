@@ -61,7 +61,11 @@ Os dois serviços sobem mesmo sem o Kafka. Os eventos ficam guardados no outbox 
 
 Cada tópico tem 3 partições e um tópico de falhas `<tópico>.dlq` (`appointments.dlq`, `payments.dlq`, `health-insurance.dlq`).
 
-O diagrama C4 prevê o Scheduled-Service como consumidor de pagamentos e planos. Enquanto o agendamento estiver no Dentist-Service, é ele quem assina esses tópicos.
+O Payment-Service consome `AppointmentRequested` para criar um pagamento pendente
+para agendamentos particulares com preço maior que zero. O consumo é idempotente:
+eventos repetidos para o mesmo agendamento não criam outro pagamento. O diagrama
+C4 prevê o Scheduled-Service como consumidor de pagamentos e planos. Enquanto o
+agendamento estiver no Dentist-Service, é ele quem assina esses tópicos.
 
 O Payment-Service publica quando o status de um pagamento muda (`PATCH /api/payments/{id}/status`):
 

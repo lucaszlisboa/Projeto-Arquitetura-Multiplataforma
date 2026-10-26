@@ -1,4 +1,14 @@
 services:
+  payment-service-wiremock:
+    container_name: payment-service-wiremock
+    build:
+      context: ..
+      dockerfile: Payment-Service/PaymentService.WireMock/Dockerfile
+    ports:
+      - "5128:5127"
+    environment:
+      WIREMOCK_PORT: 5127
+
   payment-service-db:
     container_name: payment-service-db
     image: postgres:16

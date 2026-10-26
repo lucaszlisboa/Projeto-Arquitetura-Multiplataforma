@@ -1,6 +1,6 @@
 # Odontologia Integrada — Projeto Multiplataforma
 
-Monorepo da plataforma de gestão odontológica. Reúne o **BFF** (NestJS), três APIs
+Monorepo da plataforma de gestão odontológica. Reúne o **BFF** (NestJS), quatro APIs
 **.NET 10**, uma biblioteca de **mensageria Kafka** compartilhada e a **infraestrutura**
 em Docker (Kafka, Keycloak e bancos PostgreSQL).
 
@@ -12,49 +12,121 @@ todas as aplicações.
 
 ## Arquitetura
 
-```
-                         ┌──────────────────────────────┐
-       Clientes          │   BFF (NestJS)  :3000        │
-   (web / mobile) ─────▶ │  JWT Keycloak + RBAC         │
-                         └───────┬───────────────┬──────┘
-                                 │               │
-                 ┌───────────────▼──┐      ┌─────▼────────────────┐
-                 │ Dentist-service  │      │ Employee-service     │
-                 │ .NET 10  :5068   │      │ .NET 10      :5070   │
-                 └───┬──────────┬───┘      └──────────┬───────────┘
-                     │          │                     │
-        publica/consome│      │ EF Core             │ EF Core
-                     │          ▼                     ▼
-        ┌────────────▼───┐  ┌────────────┐      ┌────────────┐
-        │ Kafka   :9092  │  │ Postgres   │      │ Postgres   │
-        │ (KRaft) :8081  │  │ dentist    │      │ employee   │
-        │ Kafka UI       │  │ :5432      │      │ :5434      │
-        └────────────────┘  └────────────┘      └────────────┘
+```mermaid
+flowchart LR
+    Client["Web / Mobile"] -->|JWT + HTTP| BFF["BFF<br/>NestJS :3000"]
+    BFF -->|autentica / autoriza| KC["Keycloak<br/>:8080"]
+    BFF -->|HTTP REST| D["Dentist-service<br/>.NET :5068"]
+    BFF -->|HTTP REST| E["Employee-service<br/>.NET :5070"]
 
-        ┌────────────────┐  ┌────────────┐      ┌────────────────┐
-        │ Keycloak :8080 │  │ Postgres   │      │ PaymentService │
-        │ realm dentist  │  │ keycloak   │      │ .NET 10 :5127  │
-        └────────────────┘  │ :5435      │      └───────┬────────┘
-                            └────────────┘              ▼
-                                                  ┌────────────┐
-                                                  │ Postgres   │
-                                                  │ payment    │
-                                                  │ :5433      │
-                                                  └────────────┘
+    D -->|EF Core| DDB[("PostgreSQL<br/>dentist :5432")]
+    E -->|EF Core| EDB[("PostgreSQL<br/>employee :5434")]
+    P["Patient-service<br/>.NET :5072"] -->|EF Core| PDB[("PostgreSQL<br/>patient :5437")]
+
+    D -->|"POST /api/payments<br/>(Private)"| Pay["Payment-service<br/>.NET :5127"]
+    Pay -->|EF Core| PayDB[("PostgreSQL<br/>payment :5433")]
+
+    D -->|"outbox: appointments<br/>consumer: payments, health-insurance"| Kafka[["Kafka :9092<br/>Kafka UI :8081"]]
+    Pay -->|"outbox: payments<br/>PaymentApproved / PaymentFailed"| Kafka
+
+    D -. "patientId no agendamento<br/>(referência lógica)" .-> P
+    Obs["Observability / Prometheus / Grafana / ELK"] -.-> D
+    Obs -.-> Pay
+
+    classDef external fill:#e8f1ff,stroke:#2563eb
+    classDef service fill:#eaf7ed,stroke:#16a34a
+    classDef data fill:#fff7e6,stroke:#d97706
+    class BFF,KC,Client external
+    class D,E,P,Pay,Kafka,Obs service
+    class DDB,EDB,PDB,PayDB data
 ```
+
+**Legenda:** linha contínua representa uma chamada ou dependência operacional;
+linha tracejada representa observabilidade ou uma referência lógica, não uma
+chave estrangeira entre bancos. O Patient-service não é consultado pelo
+Dentist-service durante a criação do agendamento: o `patientId` é recebido no
+pedido e armazenado como identificador do paciente.
 
 | Componente | Stack | Pasta |
 |---|---|---|
 | BFF | NestJS 11 / TypeScript / Node 20 (pnpm) | `bff/` |
 | Dentist-service | .NET 10 / EF Core 10 / PostgreSQL | `Dentist-Service/Dentist-service/` |
 | Employee-service | .NET 10 / EF Core 10 / PostgreSQL | `Employee-service/Employee-service/` |
-| PaymentService | .NET 10 / EF Core 10 / PostgreSQL | `PaymentService/` |
+| Patient-service | .NET 10 / EF Core 10 / PostgreSQL | `Patient-Service/Patient-service/` |
+| Payment-service | .NET 10 / EF Core 10 / PostgreSQL | `Payment-Service/` |
 | Messaging | Biblioteca .NET (Kafka + outbox) | `Messaging/` |
 | Kafka | Apache Kafka 4.3.1 (KRaft) + Kafka UI | `kafka/` |
 | Keycloak | Keycloak 26 + PostgreSQL | `keycloak/` |
 | ELK | Elasticsearch + Logstash + Kibana + Filebeat 8.17 (logs) | `elk/` |
 | Observability | Biblioteca .NET (logs JSON ECS + correlation id) | `Observability/` |
 | Observabilidade | Prometheus + Grafana + kafka-exporter | `observability/` |
+
+### Serviços e relacionamentos
+
+| Serviço | Responsabilidade | Relacionamentos |
+|---|---|---|
+| **BFF** | Ponto de entrada para web e mobile, autenticação JWT e RBAC | Encaminha chamadas para Dentist-service e Employee-service; usa Keycloak |
+| **Dentist-service** | Serviços odontológicos, expediente, disponibilidade e ciclo de vida dos agendamentos | Usa seu PostgreSQL; chama Payment-service por HTTP para consultas particulares; publica eventos de agendamento em `appointments`; consome `payments` e `health-insurance` |
+| **Patient-service** | Cadastro e manutenção dos pacientes | Usa exclusivamente seu PostgreSQL; o vínculo do paciente ao agendamento é feito pelo `patientId` |
+| **Employee-service** | Cadastro e manutenção dos funcionários da clínica | Usa exclusivamente seu PostgreSQL; acessado pelo BFF para usuários com role `employ` |
+| **Payment-service** | Criação e atualização de pagamentos | Usa seu PostgreSQL; publica `PaymentApproved` e `PaymentFailed` em `payments` |
+| **Kafka/Messaging** | Transporte assíncrono, outbox, retries e DLQ | Compartilhado principalmente por Dentist-service e Payment-service |
+| **Keycloak** | Emissão e validação de tokens e roles | Autentica clientes do BFF |
+
+O BFF é a fronteira externa recomendada. Os microsserviços mantêm seus próprios bancos
+e não compartilham tabelas entre si. A comunicação síncrona Dentist-service →
+Payment-service é HTTP; eventos de ciclo de vida e resultado de pagamento usam Kafka.
+
+### Fluxo entre os serviços
+
+```mermaid
+sequenceDiagram
+    actor U as Cliente
+    participant B as BFF
+    participant D as Dentist-service
+    participant DDB as Dentist PostgreSQL
+    participant P as Payment-service
+    participant PDB as Payment PostgreSQL
+    participant K as Kafka
+
+    U->>B: Solicita agendamento
+    B->>D: POST /api/appointments
+    D->>DDB: Salva appointment Pending + outbox
+    D-->>B: 201 Created
+    D->>P: POST /api/payments (somente Private)
+    P->>PDB: Salva payment Pending + outbox
+    P-->>D: 201 Created
+    P->>K: Publica resultado quando status muda
+    K-->>D: PaymentApproved ou PaymentFailed
+```
+
+O `201 Created` do Dentist-service ocorre depois de salvar o agendamento, mas
+antes de existir aprovação do pagamento. Portanto, o Payment-service participa
+da solicitação de cobrança, não da transação original do agendamento.
+
+### Regras do agendamento e pagamento
+
+1. O paciente ou dentista solicita um horário disponível no Dentist-service. O horário
+   deve estar dentro do expediente, alinhado à duração do serviço, nos próximos 30 dias
+   e sem conflito com outro pedido que bloqueie o horário.
+2. O Dentist-service grava o agendamento e confirma a transação **antes** de solicitar
+   o pagamento. Portanto, o pagamento não é pré-requisito para a criação do pedido.
+3. Para `Private`, o Dentist-service chama `POST /api/payments` após o commit, enviando
+   o `appointmentId` e o valor em reais. O preço do agendamento é armazenado em
+   centavos (`priceCents`), enquanto o Payment-service expõe `amount` em moeda (`15000`
+   centavos → `150.00`).
+4. O Payment-service cria inicialmente o pagamento com status `Pending`. A solicitação
+   do agendamento retorna `201` mesmo que o pagamento ainda não tenha sido aprovado.
+5. A atualização do pagamento ocorre em `PATCH /api/payments/{id}/status`. A mudança
+   para `Paid` publica `PaymentApproved`; a mudança para `Failed` publica
+   `PaymentFailed`. O Dentist-service consome esses eventos para o fluxo assíncrono.
+6. Para `Insurance`, o agendamento exige `insuranceName` e `insuranceCardNumber` e
+   não cria pagamento.
+7. Não existe transação distribuída entre os dois bancos. Se o Payment-service estiver
+   indisponível depois do commit do agendamento, pode existir um agendamento `Pending`
+   sem pagamento; esse cenário deve ser tratado por retry/outbox ou compensação.
+8. Existe no máximo um pagamento por agendamento, garantido por índice único no banco
+   do Payment-service.
 
 ---
 
@@ -63,7 +135,7 @@ todas as aplicações.
 | Ferramenta | Versão | Para quê |
 |---|---|---|
 | [Docker](https://www.docker.com/) + Docker Compose v2 | recente | Kafka, Keycloak e bancos |
-| [.NET SDK](https://dotnet.microsoft.com/download) | **10** | as três APIs |
+| [.NET SDK](https://dotnet.microsoft.com/download) | **10** | as quatro APIs |
 | [Node.js](https://nodejs.org/) + [pnpm](https://pnpm.io/) | **20** + **9** | BFF (`corepack enable`) |
 | [EF Core CLI](https://learn.microsoft.com/ef/core/cli/dotnet) | 10.x | migrations (`dotnet tool install --global dotnet-ef`) |
 
@@ -78,7 +150,8 @@ todas as aplicações.
 | BFF | **3000** | Swagger em `/docs` se `SWAGGER_ENABLED=true` |
 | Dentist-service | **5068** | HTTPS `7235`; OpenAPI em `/openapi/v1.json` |
 | Employee-service | **5070** | HTTPS `7237`; OpenAPI em `/openapi/v1.json` |
-| PaymentService | **5127** | HTTPS `7094`; Swagger só em Development |
+| Patient-service | **5072** | HTTPS `7239`; OpenAPI em `/openapi/v1.json` |
+| Payment-service | **5127** | HTTPS `7094`; Swagger só em Development |
 | Keycloak | **8080** | realm `dentist` |
 | Kafka UI | **8081** | kafbat UI |
 | Kibana | **5601** | logs (ver [`elk/README.md`](elk/README.md)) |
@@ -87,6 +160,7 @@ todas as aplicações.
 | Postgres Dentist | **5432** | db `dentist_service` |
 | Postgres Payment | **5433** | db `payment_service` |
 | Postgres Employee | **5434** | db `employee_service` |
+| Postgres Patient | **5437** | db `patient_service` |
 | Postgres Keycloak | **5435** | db `keycloak` |
 | Prometheus | **9090** | métricas dos serviços (ver `observability/`) |
 | Grafana | **3001** | `admin`/`admin` — dashboards versionados |
@@ -113,7 +187,8 @@ docker compose -f keycloak/docker-compose.yaml up -d
 # 3. Bancos das APIs .NET
 docker compose -f Dentist-Service/Dentist-service/docker-compose.yml up -d   # :5432
 docker compose -f Employee-service/Employee-service/docker-compose.yml up -d # :5434
-docker compose -f PaymentService/docker-compose.yml up -d                    # :5433
+docker compose -f Patient-Service/Patient-service/docker-compose.yml up -d    # :5437
+docker compose -f Payment-Service/docker-compose.yml up -d                    # :5433
 ```
 
 ### Kafka
@@ -172,7 +247,7 @@ curl -X POST "http://localhost:8080/realms/dentist/protocol/openid-connect/token
 
 ## Subindo as aplicações
 
-Suba sempre nesta ordem: **Kafka → banco → API**. As três APIs aplicam as
+Suba sempre nesta ordem: **Kafka → banco → API**. As quatro APIs aplicam as
 migrations do EF Core automaticamente no boot.
 
 ### Dentist-service (`:5068`)
@@ -192,16 +267,51 @@ cd Employee-service/Employee-service
 dotnet run                               # aplica migrations e sobe em http://localhost:5070
 ```
 
-### PaymentService (`:5127`)
+### Patient-service (`:5072`)
 
 ```bash
-cd PaymentService
+cd Patient-Service/Patient-service
+dotnet run                               # http://localhost:5072
+```
+
+### Payment-service (`:5127`)
+
+```bash
+cd Payment-Service
 dotnet run                               # http://localhost:5127
 ```
 
 O `Program.cs` aplica as migrations automaticamente no boot — assim como o
 Dentist-service e o Employee-service. Os logs vão para `logs/payment-service/`
 (`Observability:LogDirectory` = `../logs` no `appsettings.Development.json`).
+
+Para usar respostas HTTP falsas, sem PostgreSQL, Kafka ou migrations:
+
+```bash
+dotnet run --project Payment-Service/PaymentService.WireMock/PaymentService.WireMock.csproj
+# ou, incluindo o banco do serviço real:
+docker compose -f Payment-Service/docker-compose.yml up payment-service-wiremock
+```
+
+Quando iniciado pelo Docker Compose, o WireMock escuta em
+`http://localhost:5128` e cobre `GET /api/payments`,
+`GET /api/payments/{id}`, `POST /api/payments` e
+`PATCH /api/payments/{id}/status`, incluindo respostas de sucesso, validação
+(`400`) e pagamento inexistente (`404`). O identificador usado nas respostas
+determinísticas é `00000000-0000-0000-0000-000000000001`. Para escolher outra
+porta ao executar localmente, defina `WIREMOCK_PORT`.
+
+O Dentist-service chama `POST /api/payments` no Payment-service e recebe a
+resposta HTTP. Em Development, `PaymentService:BaseUrl` já aponta para
+`http://localhost:5128`, portanto inicie o WireMock antes do Dentist-service:
+
+```bash
+docker compose -f Payment-Service/docker-compose.yml up payment-service-wiremock
+```
+
+Para usar o serviço real, altere `PaymentService:BaseUrl` para
+`http://localhost:5127`. Depois, `PATCH /api/payments/{id}/status` publica `PaymentApproved` ou
+`PaymentFailed` no tópico `payments`, que o Dentist-service consome.
 
 ### BFF (`:3000`)
 
@@ -360,12 +470,14 @@ docker compose -f kafka/docker-compose.yaml up -d
 docker compose -f keycloak/docker-compose.yaml up -d
 docker compose -f Dentist-Service/Dentist-service/docker-compose.yml up -d
 docker compose -f Employee-service/Employee-service/docker-compose.yml up -d
-docker compose -f PaymentService/docker-compose.yml up -d
+docker compose -f Patient-Service/Patient-service/docker-compose.yml up -d
+docker compose -f Payment-Service/docker-compose.yml up -d
 
 # Aplicações (uma por terminal; as migrations são aplicadas no boot)
 (cd Dentist-Service/Dentist-service && dotnet run)   # :5068
 (cd Employee-service/Employee-service && dotnet run)  # :5070
-(cd PaymentService && dotnet run)                     # :5127
+(cd Patient-Service/Patient-service && dotnet run)    # :5072
+(cd Payment-Service && dotnet run)                    # :5127
 (cd bff && pnpm run start:dev)                        # :3000
 ```
 
@@ -390,7 +502,7 @@ container:
 
 ```bash
 (cd Dentist-Service/Dentist-service && ASPNETCORE_URLS=http://0.0.0.0:5068 dotnet run --no-launch-profile)
-(cd PaymentService && ASPNETCORE_URLS=http://0.0.0.0:5127 dotnet run --no-launch-profile)
+(cd Payment-Service && ASPNETCORE_URLS=http://0.0.0.0:5127 dotnet run --no-launch-profile)
 (cd bff && pnpm run start:dev)
 ```
 
@@ -417,8 +529,8 @@ dotnet test Messaging/Messaging.Tests/Messaging.Tests.csproj
 # Observability
 dotnet test Observability/Observability.sln
 
-# PaymentService
-dotnet test PaymentService.Tests/PaymentService.Tests.csproj
+# Payment-service
+dotnet test Payment-Service/PaymentService.Tests/PaymentService.Tests.csproj
 ```
 
 Os testes do BFF usam um JWKS local (`test/support/jwt-test-kit.ts`) — não exigem
@@ -428,10 +540,10 @@ um Keycloak real.
 
 ## Logs (ELK)
 
-BFF, Dentist-service e PaymentService gravam logs JSON (ECS) em `logs/<servico>/`; o Filebeat
+BFF, Dentist-service e Payment-service gravam logs JSON (ECS) em `logs/<servico>/`; o Filebeat
 os envia ao Elasticsearch e a consulta é feita no Kibana (`http://localhost:5601`). Cada
 requisição carrega um `labels.correlation_id` que atravessa BFF, Dentist-service, outbox,
-Kafka e PaymentService.
+Kafka e Payment-service.
 
 - Como subir e consultar: [`elk/README.md`](elk/README.md)
 - Campos, catálogo de eventos e política de dados pessoais: [`elk/docs/logging-standard.md`](elk/docs/logging-standard.md)
@@ -446,7 +558,8 @@ docker compose -f kafka/docker-compose.yaml down            # add -v para apagar
 docker compose -f keycloak/docker-compose.yaml down -v      # remove o banco do Keycloak (reimporta o realm no próximo up)
 docker compose -f Dentist-Service/Dentist-service/docker-compose.yml down -v
 docker compose -f Employee-service/Employee-service/docker-compose.yml down -v
-docker compose -f PaymentService/docker-compose.yml down -v
+docker compose -f Patient-Service/Patient-service/docker-compose.yml down -v
+docker compose -f Payment-Service/docker-compose.yml down -v
 ```
 
 ---
@@ -454,8 +567,8 @@ docker compose -f PaymentService/docker-compose.yml down -v
 ## Troubleshooting
 
 - **Conflito de portas nos bancos.** Cada banco publica uma porta diferente no host:
-  Dentist `5432`, Payment `5433`, Employee `5434`, Keycloak `5435`. O Postgres do
-  Keycloak fica em `5435` justamente porque `5433` é do PaymentService. Se aparecer
+  Dentist `5432`, Payment `5433`, Employee `5434`, Keycloak `5435`, Patient `5437`. O Postgres do
+  Keycloak fica em `5435` justamente porque `5433` é do Payment-service. Se aparecer
   `port is already allocated`, ajuste a porta publicada no compose correspondente.
 - **Realm do Keycloak desatualizado.** O realm só é importado na primeira subida.
   Alterou o JSON? `docker compose -f keycloak/docker-compose.yaml down -v && up -d`.
@@ -471,7 +584,8 @@ docker compose -f PaymentService/docker-compose.yml down -v
 
 ## Observações
 
-- O `PaymentService` ainda não tem README, solução (`.sln`) nem testes, e publica
-  eventos apenas via log (sem Kafka).
+- O Payment-service possui endpoints HTTP e publicação de eventos via outbox/Kafka;
+  o WireMock em `Payment-Service/PaymentService.WireMock/` existe para testes e
+  desenvolvimento sem depender do serviço real.
 - Pastas `Dentist-service.Tests/` (na raiz) e `Dentist-Service/service-Dentist/`
   contêm apenas artefatos de build (`bin/`/`obj/`), sem código-fonte.

@@ -19,6 +19,7 @@
 
   <ItemGroup>
     <Compile Remove="PaymentService.Tests/**/*.cs" />
+    <Compile Remove="PaymentService.WireMock/**/*.cs" />
   </ItemGroup>
 
   <ItemGroup>

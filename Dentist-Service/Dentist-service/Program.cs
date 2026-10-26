@@ -9,6 +9,7 @@ using Messaging;
 using Messaging.Telemetry;
 using Microsoft.EntityFrameworkCore;
 using Observability;
+using Dentist_service.DentistsServices.Infrastructure.Payments;
 using OpenTelemetry.Exporter;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
@@ -41,6 +42,11 @@ builder.Services.AddScoped<IDentistServicesValidator, DentistServicesValidator>(
 builder.Services.AddScoped<IDentistServicesUseCase, DentistServicesUseCase>();
 
 builder.Services.AddScoped<IAppointmentEventPublisher, AppointmentEventPublisher>();
+builder.Services.AddHttpClient<IPaymentServiceClient, PaymentServiceClient>(client =>
+{
+    var baseUrl = builder.Configuration["PaymentService:BaseUrl"] ?? "http://localhost:5127";
+    client.BaseAddress = new Uri($"{baseUrl.TrimEnd('/')}/");
+});
 
 // ──────────────────────────────────────────────
 // Observabilidade: métricas de negócio + Prometheus
