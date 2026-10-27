@@ -12,8 +12,8 @@
 # Kafka escutam apenas em 127.0.0.1 — o BFF as alcança por dentro do container,
 # mas elas ficam inacessíveis de fora, mesmo que alguém publique a porta com -p.
 #
-# O target "bff" continua disponível apenas para desenvolvimento isolado do BFF:
-#   docker build --target bff -t bff .
+# Targets separados são usados pelo compose.yaml. O target "bff" também pode ser
+# usado isoladamente: docker build --target bff -t bff .
 
 # =============================================================================
 # BFF (NestJS) — build
@@ -26,22 +26,22 @@ RUN pnpm install --frozen-lockfile
 COPY bff/ ./
 RUN pnpm run build && pnpm prune --prod
 
-# Target opcional para rodar somente o BFF (usado no docker-compose.dev.yml).
+# Target do BFF usado pelo compose.yaml e pelo perfil `mock`.
 FROM node:20-alpine AS bff
 WORKDIR /app
 ENV NODE_ENV=production
-RUN addgroup -S app && adduser -S app -G app
-COPY --from=bff-build --chown=app:app /app/dist ./dist
-COPY --from=bff-build --chown=app:app /app/node_modules ./node_modules
-COPY --from=bff-build --chown=app:app /app/package.json ./package.json
-USER app
+COPY --from=bff-build --chown=node:node /app/dist ./dist
+COPY --from=bff-build --chown=node:node /app/node_modules ./node_modules
+COPY --from=bff-build --chown=node:node /app/package.json ./package.json
+RUN mkdir -p /app/logs && chown node:node /app/logs
+USER node
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
   CMD wget -qO- http://127.0.0.1:3000/health || exit 1
 CMD ["node", "dist/main"]
 
 # =============================================================================
-# APIs .NET — build das três aplicações
+# APIs .NET — build das quatro aplicações
 # =============================================================================
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS dotnet-build
 WORKDIR /src
@@ -51,24 +51,71 @@ COPY Messaging/Messaging/Messaging.csproj Messaging/Messaging/
 COPY Observability/Observability/Observability.csproj Observability/Observability/
 COPY Dentist-Service/Dentist-service/Dentist-service.csproj Dentist-Service/Dentist-service/
 COPY Employee-service/Employee-service/Employee-service.csproj Employee-service/Employee-service/
+COPY Patient-Service/Patient-service/Patient-service.csproj Patient-Service/Patient-service/
 COPY Payment-Service/PaymentService.csproj Payment-Service/
 RUN --mount=type=cache,target=/root/.nuget/packages \
     sh -c 'dotnet restore Dentist-Service/Dentist-service/Dentist-service.csproj && \
            dotnet restore Employee-service/Employee-service/Employee-service.csproj && \
+           dotnet restore Patient-Service/Patient-service/Patient-service.csproj && \
            dotnet restore Payment-Service/PaymentService.csproj'
 
 COPY Messaging/ Messaging/
 COPY Observability/ Observability/
 COPY Dentist-Service/Dentist-service/ Dentist-Service/Dentist-service/
 COPY Employee-service/Employee-service/ Employee-service/Employee-service/
+COPY Patient-Service/Patient-service/ Patient-Service/Patient-service/
 COPY Payment-Service/ Payment-Service/
 RUN --mount=type=cache,target=/root/.nuget/packages \
     sh -c 'dotnet publish Dentist-Service/Dentist-service/Dentist-service.csproj \
              --configuration Release --no-restore --output /out/dentist /p:UseAppHost=false && \
            dotnet publish Employee-service/Employee-service/Employee-service.csproj \
              --configuration Release --no-restore --output /out/employee /p:UseAppHost=false && \
+           dotnet publish Patient-Service/Patient-service/Patient-service.csproj \
+             --configuration Release --no-restore --output /out/patient /p:UseAppHost=false && \
            dotnet publish Payment-Service/PaymentService.csproj \
              --configuration Release --no-restore --output /out/payment /p:UseAppHost=false'
+
+# Imagens independentes das APIs usadas pelo compose.yaml.
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS dotnet-runtime
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+
+FROM dotnet-runtime AS dentist-service
+WORKDIR /app
+ENV ASPNETCORE_URLS=http://+:5068
+COPY --from=dotnet-build /out/dentist/ ./
+EXPOSE 5068
+HEALTHCHECK --interval=15s --timeout=5s --start-period=90s --retries=5 \
+  CMD curl -fsS http://127.0.0.1:5068/health || exit 1
+ENTRYPOINT ["dotnet", "Dentist-service.dll"]
+
+FROM dotnet-runtime AS employee-service
+WORKDIR /app
+ENV ASPNETCORE_URLS=http://+:5070
+COPY --from=dotnet-build /out/employee/ ./
+EXPOSE 5070
+HEALTHCHECK --interval=15s --timeout=5s --start-period=90s --retries=5 \
+  CMD curl -fsS http://127.0.0.1:5070/health || exit 1
+ENTRYPOINT ["dotnet", "Employee-service.dll"]
+
+FROM dotnet-runtime AS patient-service
+WORKDIR /app
+ENV ASPNETCORE_URLS=http://+:5072
+COPY --from=dotnet-build /out/patient/ ./
+EXPOSE 5072
+HEALTHCHECK --interval=15s --timeout=5s --start-period=60s --retries=5 \
+  CMD curl -fsS http://127.0.0.1:5072/health || exit 1
+ENTRYPOINT ["dotnet", "Patient-service.dll"]
+
+FROM dotnet-runtime AS payment-service
+WORKDIR /app
+ENV ASPNETCORE_URLS=http://+:5127
+COPY --from=dotnet-build /out/payment/ ./
+EXPOSE 5127
+HEALTHCHECK --interval=15s --timeout=5s --start-period=90s --retries=5 \
+  CMD curl -fsS http://127.0.0.1:5127/health || exit 1
+ENTRYPOINT ["dotnet", "PaymentService.dll"]
 
 # =============================================================================
 # Imagem final — aplicações + infraestrutura no mesmo container

@@ -13,17 +13,13 @@ pnpm install
 pnpm run start:dev     # http://localhost:3000 | Swagger em /docs (se SWAGGER_ENABLED=true)
 ```
 
-Via Docker (na raiz do repositório):
+Via Docker, usando o Compose único na raiz do repositório:
 
 ```bash
-# imagem completa: BFF + APIs + Postgres + Kafka + Keycloak
-docker build -t odontologia .
+docker compose up --build -d
 
-# somente o BFF, para desenvolvimento isolado
-docker build --target bff -t bff .
-docker run -p 3000:3000 --env-file bff/.env bff
-# ou com mock do downstream:
-cd bff && docker compose -f docker-compose.dev.yml up
+# BFF com mock do Dentist-service, na porta 3002
+docker compose --profile mock up -d bff-mock
 ```
 
 `GET /health` é público (liveness).
@@ -37,9 +33,8 @@ Ver `.env.example` (todas as variáveis do 10 do spec). Obrigatórias:
 
 ### Logs
 
-O BFF escreve logs JSON (ECS) no stdout e, se `LOG_DIR` estiver definido, também em
-`<LOG_DIR>/bff/bff.log` para o ELK (`LOG_DIR=../logs` no host; no `docker-compose.dev.yml`
-é `/app/logs`, montado de `../logs`). Cada log traz `labels.correlation_id` (header
+O BFF escreve logs JSON (ECS) no stdout e em `/app/logs/bff/bff.log` no volume compartilhado
+com o Filebeat. Cada log traz `labels.correlation_id` (header
 `X-Correlation-Id`). Eventos: `auth.denied`, `http.rate_limited`, `downstream.timeout|unavailable|error`.
 Headers, tokens e query strings não são logados. Detalhes em
 [`../elk/docs/logging-standard.md`](../elk/docs/logging-standard.md).
@@ -89,9 +84,8 @@ TOKEN=$(curl -s -X POST "http://localhost:8080/realms/dentist/protocol/openid-co
 curl -H "Authorization: Bearer $TOKEN" http://localhost:3000/api/employees
 ```
 
-> O Keycloak só importa o realm quando ele ainda não existe. Se o container já
-> foi criado antes, recrie o banco do Keycloak para carregar a role `employ`:
-> `docker compose down -v && docker compose up -d` (na pasta `keycloak/`).
+> O Keycloak importa o realm quando ele ainda não existe. Para reaplicar alterações ao realm,
+> use `keycloak/seed.sh` ou recrie os dados conforme as instruções do README da raiz.
 
 ## Matriz RBAC
 

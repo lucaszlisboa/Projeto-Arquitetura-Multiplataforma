@@ -22,7 +22,7 @@ servers:
   local:
     host: localhost:9092
     protocol: kafka
-    description: Broker local (`kafka/docker-compose.yaml`). Containers na rede `odontologia-network` usam `kafka:19092`.
+    description: Broker local definido em `compose.yaml`. Containers usam `kafka:19092`.
 
 defaultContentType: application/json
 

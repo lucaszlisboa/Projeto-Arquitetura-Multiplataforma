@@ -17,7 +17,7 @@ O contrato completo dos eventos está em [`docs/asyncapi.yml`](docs/asyncapi.yml
 Na raiz do repositório:
 
 ```bash
-docker compose -f kafka/docker-compose.yaml up -d
+docker compose up -d kafka kafka-init kafka-ui
 ```
 
 Isso sobe três containers:
@@ -40,12 +40,9 @@ Isso sobe três containers:
 
 ## Ordem de subida do sistema
 
-1. Kafka: `docker compose -f kafka/docker-compose.yaml up -d`
-2. Banco do Dentist-Service: `docker compose up -d` em `Dentist-Service/Dentist-service`
-3. Migrations: `dotnet ef database update` em `Dentist-Service/Dentist-service`
-4. Dentist-Service: `dotnet run` em `Dentist-Service/Dentist-service`
-5. Banco do Payment-Service: `docker compose up -d` em `Payment-Service`
-6. Payment-Service: `dotnet run` em `Payment-Service` (aplica as migrations ao subir)
+1. Na raiz, execute `docker compose up --build -d`.
+2. O Compose aguarda Kafka e bancos; Dentist e Payment aplicam migrations ao iniciar.
+3. Acompanhe com `docker compose ps` e `docker compose logs -f dentist-service payment-service`.
 
 Os dois serviços sobem mesmo sem o Kafka. Os eventos ficam guardados no outbox e são publicados quando o broker voltar.
 
@@ -261,13 +258,13 @@ networks:
 Ler os eventos de agendamento, com a chave:
 
 ```bash
-docker compose -f kafka/docker-compose.yaml exec kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic appointments --from-beginning --formatter-property print.key=true
+docker compose exec kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic appointments --from-beginning --formatter-property print.key=true
 ```
 
 Publicar um evento de pagamento no formato `chave|valor`:
 
 ```bash
-docker compose -f kafka/docker-compose.yaml exec kafka /opt/kafka/bin/kafka-console-producer.sh --bootstrap-server localhost:9092 --topic payments --reader-property parse.key=true --reader-property "key.separator=|"
+docker compose exec kafka /opt/kafka/bin/kafka-console-producer.sh --bootstrap-server localhost:9092 --topic payments --reader-property parse.key=true --reader-property "key.separator=|"
 ```
 
 Pelo Kafka UI (`http://localhost:8081`) também dá para ver as mensagens e publicar novas em **Topics → Produce Message**.
@@ -287,11 +284,7 @@ Pelo Kafka UI (`http://localhost:8081`) também dá para ver as mensagens e publ
 ## Parando o broker
 
 ```bash
-docker compose -f kafka/docker-compose.yaml down
+docker compose stop kafka kafka-init kafka-ui
 ```
 
-Para remover também os tópicos e mensagens:
-
-```bash
-docker compose -f kafka/docker-compose.yaml down -v
-```
+O volume do broker permanece. `docker compose down -v`, executado na raiz, remove os volumes de toda a stack.

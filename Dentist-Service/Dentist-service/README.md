@@ -6,8 +6,8 @@ API REST para gerenciamento de serviços, expediente e agendamentos odontológic
 
 ## Pré-requisitos
 
-- [.NET 10 SDK](https://dotnet.microsoft.com/download)
-- [Docker](https://www.docker.com/) e Docker Compose
+- [Docker](https://www.docker.com/) e Docker Compose v2
+- [.NET 10 SDK](https://dotnet.microsoft.com/download) (somente para executar no host)
 - (Opcional) [dotnet-ef CLI](https://learn.microsoft.com/ef/core/cli/dotnet)
 
 ---
@@ -27,13 +27,13 @@ DentistsServices.Api/             # Controllers HTTP
 
 ### 1. Banco de dados
 
-Suba o PostgreSQL via Docker Compose:
+Suba o banco pelo Compose único, a partir da raiz do repositório:
 
 ```bash
-docker compose up -d
+docker compose up -d dentist-db
 ```
 
-Isso cria um container PostgreSQL 12 com:
+Isso cria um container PostgreSQL 16 com:
 
 | Parâmetro | Valor         |
 |-----------|---------------|
@@ -43,7 +43,7 @@ Isso cria um container PostgreSQL 12 com:
 | Usuário   | postgres      |
 | Senha     | postgres      |
 
-> Para usar credenciais diferentes, edite `docker-compose.yml` e `appsettings.json` antes de continuar.
+> As portas e credenciais podem ser alteradas no `.env` da raiz. No container, o Compose configura a conexão pelo nome `dentist-db`.
 
 ### 2. Connection string
 
@@ -211,11 +211,7 @@ Pedidos começam `Pending`. O tipo `Private` registra preço em centavos no pedi
 ## Parando o banco
 
 ```bash
-docker compose down
+docker compose stop dentist-service dentist-db
 ```
 
-Para remover também os dados persistidos:
-
-```bash
-docker compose down -v
-```
+O volume do banco permanece. `docker compose down -v`, executado na raiz, remove os volumes de toda a stack.

@@ -1,12 +1,12 @@
 # Odontologia Integrada — Projeto Multiplataforma
 
 Monorepo da plataforma de gestão odontológica. Reúne o **BFF** (NestJS), quatro APIs
-**.NET 10**, uma biblioteca de **mensageria Kafka** compartilhada e a **infraestrutura**
-em Docker (Kafka, Keycloak e bancos PostgreSQL).
+**.NET 10**, uma biblioteca de **mensageria Kafka** compartilhada e a infraestrutura
+em Docker. O [`compose.yaml`](compose.yaml) na raiz reúne aplicações, bancos,
+mensageria, autenticação, métricas e logs.
 
-Cada serviço tem o seu próprio `docker-compose` e o seu próprio README com detalhes
-internos. Este documento é o guia **de ponta a ponta**: como subir a infraestrutura e
-todas as aplicações.
+Este documento é o guia **de ponta a ponta**: como subir o sistema e executar os
+serviços individualmente durante o desenvolvimento.
 
 ---
 
@@ -134,7 +134,7 @@ da solicitação de cobrança, não da transação original do agendamento.
 
 | Ferramenta | Versão | Para quê |
 |---|---|---|
-| [Docker](https://www.docker.com/) + Docker Compose v2 | recente | Kafka, Keycloak e bancos |
+| [Docker](https://www.docker.com/) + Docker Compose v2 | recente | sistema completo |
 | [.NET SDK](https://dotnet.microsoft.com/download) | **10** | as quatro APIs |
 | [Node.js](https://nodejs.org/) + [pnpm](https://pnpm.io/) | **20** + **9** | BFF (`corepack enable`) |
 | [EF Core CLI](https://learn.microsoft.com/ef/core/cli/dotnet) | 10.x | migrations (`dotnet tool install --global dotnet-ef`) |
@@ -152,6 +152,7 @@ da solicitação de cobrança, não da transação original do agendamento.
 | Employee-service | **5070** | HTTPS `7237`; OpenAPI em `/openapi/v1.json` |
 | Patient-service | **5072** | HTTPS `7239`; OpenAPI em `/openapi/v1.json` |
 | Payment-service | **5127** | HTTPS `7094`; Swagger só em Development |
+| Payment WireMock | **5128** | respostas HTTP simuladas; perfil `mock` |
 | Keycloak | **8080** | realm `dentist` |
 | Kafka UI | **8081** | kafbat UI |
 | Kibana | **5601** | logs (ver [`elk/README.md`](elk/README.md)) |
@@ -170,26 +171,26 @@ Todas as senhas de desenvolvimento são `postgres` (bancos) e o Kafka é `PLAINT
 
 ---
 
-## Subindo a infraestrutura (Docker)
+## Subindo o sistema (Docker Compose)
 
-Cada pasta tem o seu próprio compose. Rode da **raiz do repositório** com `-f`:
+Instale Docker Desktop (ou Docker Engine com Docker Compose v2). Na raiz do
+repositório, copie as variáveis locais e inicie as aplicações com as dependências:
 
 ```bash
-# 0. (Opcional) ELK: Elasticsearch + Logstash + Filebeat + Kibana (~3 GB de RAM)
-(cd elk && docker compose up -d)
-
-# 1. Kafka + Kafka UI + criação dos tópicos
-docker compose -f kafka/docker-compose.yaml up -d
-
-# 2. Keycloak + banco do Keycloak (realm `dentist` importado automaticamente)
-docker compose -f keycloak/docker-compose.yaml up -d
-
-# 3. Bancos das APIs .NET
-docker compose -f Dentist-Service/Dentist-service/docker-compose.yml up -d   # :5432
-docker compose -f Employee-service/Employee-service/docker-compose.yml up -d # :5434
-docker compose -f Patient-Service/Patient-service/docker-compose.yml up -d    # :5437
-docker compose -f Payment-Service/docker-compose.yml up -d                    # :5433
+cp .env.example .env
+docker compose up --build -d
 ```
+
+Para iniciar também Prometheus, Grafana e ELK:
+
+```bash
+docker compose --profile observability --profile elk up --build -d
+```
+
+O Compose cria bancos e tópicos, importa o realm do Keycloak e aplica as migrations
+das APIs no boot. A primeira execução baixa imagens e dependências, então pode levar
+alguns minutos. Consulte os serviços com `docker compose ps` e os logs com
+`docker compose logs -f dentist-service`.
 
 ### Kafka
 
@@ -200,7 +201,7 @@ entrar no comando do `kafka-init`.
 Tópicos: `appointments`, `payments`, `health-insurance` e as respectivas `.dlq`.
 
 - Aplicações no host → `localhost:9092`
-- Containers na rede `odontologia-network` → `kafka:19092`
+- Containers no Compose → `kafka:19092`
 - Kafka UI → `http://localhost:8081`
 
 Detalhes de evento, envelope e DLQ em [`kafka/README.md`](kafka/README.md).
@@ -219,8 +220,9 @@ Detalhes de evento, envelope e DLQ em [`kafka/README.md`](kafka/README.md).
   | `paciente1` | `patient` | `/api/appointments` |
 
 > O Keycloak só importa o realm quando ele ainda não existe. Se mudou o
-> `dentist-realm.json` (ou já tinha subido antes), recrie o banco para reimportar:
-> `docker compose -f keycloak/docker-compose.yaml down -v && docker compose -f keycloak/docker-compose.yaml up -d`.
+> `dentist-realm.json`, use `./keycloak/seed.sh` para aplicar as mudanças sem apagar
+> os dados existentes. Para reimportar do zero, remova o volume
+> `odontologia_keycloak-db-data` e suba o Compose novamente.
 
 #### Seeder
 
@@ -247,8 +249,10 @@ curl -X POST "http://localhost:8080/realms/dentist/protocol/openid-connect/token
 
 ## Subindo as aplicações
 
-Suba sempre nesta ordem: **Kafka → banco → API**. As quatro APIs aplicam as
-migrations do EF Core automaticamente no boot.
+O Compose da raiz inicia aplicações e dependências juntas; as APIs aplicam as
+migrations do EF Core automaticamente no boot. Para executar uma API no host com
+`dotnet run`, mantenha as dependências do Compose iniciadas e pare primeiro o
+container correspondente para liberar a porta.
 
 ### Dentist-service (`:5068`)
 
@@ -289,8 +293,8 @@ Para usar respostas HTTP falsas, sem PostgreSQL, Kafka ou migrations:
 
 ```bash
 dotnet run --project Payment-Service/PaymentService.WireMock/PaymentService.WireMock.csproj
-# ou, incluindo o banco do serviço real:
-docker compose -f Payment-Service/docker-compose.yml up payment-service-wiremock
+# ou use o perfil mock do Compose da raiz:
+docker compose --profile mock up -d payment-service-wiremock
 ```
 
 Quando iniciado pelo Docker Compose, o WireMock escuta em
@@ -306,12 +310,18 @@ resposta HTTP. Em Development, `PaymentService:BaseUrl` já aponta para
 `http://localhost:5128`, portanto inicie o WireMock antes do Dentist-service:
 
 ```bash
-docker compose -f Payment-Service/docker-compose.yml up payment-service-wiremock
+docker compose --profile mock up -d payment-service-wiremock
 ```
 
-Para usar o serviço real, altere `PaymentService:BaseUrl` para
-`http://localhost:5127`. Depois, `PATCH /api/payments/{id}/status` publica `PaymentApproved` ou
-`PaymentFailed` no tópico `payments`, que o Dentist-service consome.
+Ao executar o Dentist-service no host, `PaymentService:BaseUrl` em Development
+aponta para `http://localhost:5128`. O Compose configura o Dentist-service em
+container para chamar `http://payment-service:5127`; para usar o mock no container,
+defina `PAYMENT_SERVICE_BASE_URL=http://payment-service-wiremock:5127` no `.env` e
+rode `docker compose --profile mock up --build -d dentist-service payment-service-wiremock`.
+Para usar o serviço real no host, altere
+`PaymentService:BaseUrl` para `http://localhost:5127`. Depois,
+`PATCH /api/payments/{id}/status` publica `PaymentApproved` ou `PaymentFailed` no
+tópico `payments`, que o Dentist-service consome.
 
 ### BFF (`:3000`)
 
@@ -336,8 +346,7 @@ SWAGGER_ENABLED=true
 Via Docker (sobe o BFF com um **mock** do Dentist-service, sem precisar da API real):
 
 ```bash
-cd bff
-docker compose -f docker-compose.dev.yml up
+docker compose --profile mock up -d bff-mock
 ```
 
 Lista completa de variáveis e a matriz de RBAC em [`bff/README.md`](bff/README.md).
@@ -464,21 +473,8 @@ embarcados continuam rodando, mas as aplicações usam o destino informado.
 ## Resumo: subir o sistema inteiro
 
 ```bash
-# Infraestrutura
-(cd elk && docker compose up -d)                      # opcional: logs no Kibana :5601
-docker compose -f kafka/docker-compose.yaml up -d
-docker compose -f keycloak/docker-compose.yaml up -d
-docker compose -f Dentist-Service/Dentist-service/docker-compose.yml up -d
-docker compose -f Employee-service/Employee-service/docker-compose.yml up -d
-docker compose -f Patient-Service/Patient-service/docker-compose.yml up -d
-docker compose -f Payment-Service/docker-compose.yml up -d
-
-# Aplicações (uma por terminal; as migrations são aplicadas no boot)
-(cd Dentist-Service/Dentist-service && dotnet run)   # :5068
-(cd Employee-service/Employee-service && dotnet run)  # :5070
-(cd Patient-Service/Patient-service && dotnet run)    # :5072
-(cd Payment-Service && dotnet run)                    # :5127
-(cd bff && pnpm run start:dev)                        # :3000
+cp .env.example .env
+docker compose --profile observability --profile elk up --build -d
 ```
 
 ---
@@ -489,16 +485,15 @@ Stack completa em `observability/`, cobrindo os fluxos de **agendamento** e
 **pagamento** de ponta a ponta (negócio, Kafka/outbox/DLQ, HTTP e runtime).
 
 ```bash
-# Kafka precisa estar no ar primeiro
-docker compose -f kafka/docker-compose.yaml up -d
-docker compose -f observability/docker-compose.yaml up -d
-
-# Prometheus → http://localhost:9090   |   Grafana → http://localhost:3001 (admin/admin)
+docker compose --profile observability up -d
 ```
 
-Para o Prometheus (em container) raspar as apps (no host), suba-as escutando em
-**`0.0.0.0`** — o bind padrão de dev (`localhost`) não é acessível de dentro do
-container:
+Prometheus → `http://localhost:9090` | Grafana → `http://localhost:3001` (`admin`/`admin`).
+
+O perfil `observability` inicia Prometheus e Grafana na mesma rede das APIs. Se
+executar as aplicações no host em vez de usar os containers do Compose, suba-as
+escutando em **`0.0.0.0`** — o bind padrão de dev (`localhost`) não é acessível de
+dentro do container:
 
 ```bash
 (cd Dentist-Service/Dentist-service && ASPNETCORE_URLS=http://0.0.0.0:5068 dotnet run --no-launch-profile)
@@ -553,13 +548,9 @@ Kafka e Payment-service.
 ## Parando / limpando
 
 ```bash
-(cd elk && docker compose down)                              # add -v para apagar índices e offsets
-docker compose -f kafka/docker-compose.yaml down            # add -v para apagar tópicos/dados
-docker compose -f keycloak/docker-compose.yaml down -v      # remove o banco do Keycloak (reimporta o realm no próximo up)
-docker compose -f Dentist-Service/Dentist-service/docker-compose.yml down -v
-docker compose -f Employee-service/Employee-service/docker-compose.yml down -v
-docker compose -f Patient-Service/Patient-service/docker-compose.yml down -v
-docker compose -f Payment-Service/docker-compose.yml down -v
+docker compose --profile observability --profile elk down
+# Acrescente --volumes para apagar bancos, logs, índices e dados do Kafka.
+docker compose --profile observability --profile elk down --volumes
 ```
 
 ---
@@ -571,7 +562,8 @@ docker compose -f Payment-Service/docker-compose.yml down -v
   Keycloak fica em `5435` justamente porque `5433` é do Payment-service. Se aparecer
   `port is already allocated`, ajuste a porta publicada no compose correspondente.
 - **Realm do Keycloak desatualizado.** O realm só é importado na primeira subida.
-  Alterou o JSON? `docker compose -f keycloak/docker-compose.yaml down -v && up -d`.
+  Alterou o JSON? Use `./keycloak/seed.sh` ou remova o volume
+  `odontologia_keycloak-db-data` para reimportar do zero.
 - **`dotnet ef` não encontrado.** Necessário apenas para criar novas migrations:
   `dotnet tool install --global dotnet-ef` e garanta que `~/.dotnet/tools` está no `PATH`.
 - **Dentist-service com erro 500 ao criar agendamento.** Confirme que o Postgres
